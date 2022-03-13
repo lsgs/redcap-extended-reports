@@ -1,0 +1,58 @@
+{
+    "name": "Extended Reports",
+    "description": "Extensions to REDCap's built in Data Exports & Reports functionality.",
+    "namespace": "MCRI\\ExtendedReports",
+    "authors": [
+        {
+            "name": "Luke Stevens",
+            "email": "luke.stevens@mcri.edu.au",
+            "institution": "Murdoch Children's Research Institute"
+        }
+    ],
+    "framework-version": 8,
+    "compatibility": {
+        "redcap-version-min": "11.1.1"
+    },
+    "permissions": [
+        "redcap_every_page_before_render",
+        "redcap_every_page_top"
+    ],
+    "enable-every-page-hooks-on-system-pages": true,
+    "system-settings": [
+    ],
+    "project-settings": [
+        {
+            "key": "report-config",
+            "name": "Report Extension Configuration",
+            "required": false,
+            "type": "sub_settings",
+            "repeatable": true,
+            "sub_settings": [
+                {
+                    "key": "report-id",
+                    "name": "Report ID",
+                    "type": "text",
+                    "required": true
+                },
+                {
+                    "key": "rpt-is-sql",
+                    "name": "Is SQL Report?",
+                    "type": "checkbox",
+                    "super-users-only": true
+                },
+                {
+                    "key": "rpt-sql",
+                    "name": "Report SQL",
+                    "type": "textarea",
+                    "super-users-only": true
+                },
+                {
+                    "key": "rpt-is-reshaped",
+                    "name": "Reshape specified?",
+                    "type": "checkbox",
+                    "super-users-only": false
+                }
+            ]
+        }
+    ]
+}
