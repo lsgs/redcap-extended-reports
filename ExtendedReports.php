@@ -99,7 +99,8 @@ class ExtendedReports extends AbstractExternalModule
      * Apply tweaks to the Report List and Report Edit pages to enable the configuration of the extensions.
      */
     public function redcap_every_page_top($project_id) {
-        if (PAGE!='DataExport/index.php') { return; }
+        if (PAGE!='DataExport/index.php') return;
+        if (!defined("USERID")) return; // in case logging in on data export page - $this->getUser() throws exception
 
         if ($this->getUser()->isSuperUser() && isset($_GET['create']) && isset($_GET['addedit'])) {
             // creating a new report, give option to super users for sql report
@@ -408,15 +409,15 @@ class ExtendedReports extends AbstractExternalModule
     }
 
     protected function doExtendedReport($extendedAttributes, $format, $csvDelimiter=null, $decimalCharacter=null) {
-        $csvDelimiter = (is_null($csvDelimiter)) ? UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
-        $csvDelimiter = (is_null($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
-        $decimalCharacter = (is_null($decimalCharacter)) ? UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
-        $decimalCharacter = (is_null($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
+        $csvDelimiter = (empty($csvDelimiter)) ? UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
+        $csvDelimiter = (empty($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
+        $decimalCharacter = (empty($decimalCharacter)) ? UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
+        $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
         if (array_key_exists('rpt-is-sql', $extendedAttributes) && $extendedAttributes['rpt-is-sql']) {
             return $this->doSqlReport($extendedAttributes['rpt-sql'], $format, $csvDelimiter, $decimalCharacter);
         } else {
-            // ...
+            // ... extended
         }
     }
 
@@ -503,7 +504,7 @@ class ExtendedReports extends AbstractExternalModule
             }
             $return_content = $report_table;
 
-        } else if ($format=='csv') { 
+        } else if ($format=='csvraw' || $format=='csvlabel') { 
             $return_content = ""; // If no results will return empty CSV with no headers (follows pattern of regualr data exports)
             if ($num_results_returned > 0) {
 
@@ -553,7 +554,7 @@ class ExtendedReports extends AbstractExternalModule
             $return_content = trim($return_content).'</records>';
         }
 
-        $output[] = $return_content;
+        $output[] = trim($return_content);
         $output[] = $num_results_returned;
         return $output;
     }
