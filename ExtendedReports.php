@@ -613,6 +613,7 @@ class ExtendedReports extends AbstractExternalModule
 
         // error with call - let it proceed and fail again for the user in the usual way
         if (!isset($_POST['token']) || !isset($_POST['content']) || $_POST['content']!='report' || !isset($_POST['report_id']) ) return;
+		if (empty($_POST['report_id'])) return;
 
         $format = (isset($_POST['format'])) ? \htmlspecialchars($_POST['format']) : 'xml';
 
@@ -633,6 +634,7 @@ class ExtendedReports extends AbstractExternalModule
             $pid = $row['project_id'];
         }
 
+		if (empty($pid)) return;
         $extendedAttributes = $this->getExtendedAttributes($report_id, $pid);
         if (is_null($extendedAttributes)) return; // no extensions on this report - return
 
