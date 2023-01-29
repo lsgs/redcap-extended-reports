@@ -20,7 +20,7 @@ use User;
 class ExtendedReports extends AbstractExternalModule
 {
     protected const SQL_OPTION_TD0_HTML = '<b><i class="fas fa-th mr-1"></i>Custom SQL Query</b><div class="wrap" style="color:#888;font-size:11px;line-height:12px;margin-top:5px;">Administrators only<br>SELECT queries only</div>';
-    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox" style="height:45px;font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (if applicable).<br>If you wish to avoid DAG filtering, have your SQL return the column renamed to something else.</div></div></div></div>';
+    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox" style="height:45px;font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
     protected const SQL_OPTION_TD1_HTML_PLEB = '<span style="font-size: large;" class="text-muted">MAG<i class="fas fa-magic"></i>C</span>';
     protected const DEFAULT_CSV_DELIMITER = ',';
     protected const DEFAULT_CSV_LINE_END = PHP_EOL;
@@ -49,7 +49,7 @@ class ExtendedReports extends AbstractExternalModule
             foreach(array_keys($_POST) as $key) {
                 if(strpos($key, 'rpt-')===0 && !empty($_POST[$key])) {
                     try {
-                        $this->saveReport(\htmlspecialchars($_GET['report_id']));
+                        $this->saveReport(\htmlspecialchars($_GET['report_id'], ENT_QUOTES));
                     } catch (Exception $ex) {
                         REDCap::logEvent('Extended Reports module', 'Report save failed \n<br> '.$ex->getMessage());
                     }
@@ -59,7 +59,7 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (PAGE == 'DataExport/report_ajax.php') {
             // viewing a report - get the html to display
-            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id']));
+            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id'], ENT_QUOTES));
 
             if (!is_null($extendedReport)) {
                 $this->viewReport($extendedReport);
@@ -68,16 +68,18 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (PAGE == 'DataExport/data_export_ajax.php') {
             // exporting a report - get the export files (only csvraw and csvlabel export option gets any manipulation)
-            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id']));
+            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id'], ENT_QUOTES));
 
-            if (!is_null($extendedReport) && ($_POST['export_format']==='csvraw' || $_POST['export_format']==='csvlabels')) {
-                $this->exportReport($extendedReport);
-                $this->exitAfterHook();
+            if (!is_null($extendedReport) && (\htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvraw' || \htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvlabels')) {
+                if(!isset($_GET['extended_report_hook_bypass'])) {
+                    $this->exportReport($extendedReport);
+                    $this->exitAfterHook();
+                }
             }
 
         } else if (isset($_POST['report_id']) && (PAGE == 'DataExport/report_copy_ajax.php' || PAGE == 'DataExport/report_delete_ajax.php')) {
             // copying or deleting a report
-            $report_id = \htmlspecialchars($_POST['report_id']);
+            $report_id = \htmlspecialchars($_POST['report_id'], ENT_QUOTES);
             $report = DataExport::getReports($report_id);
             if (empty($report)) return;
 
@@ -89,7 +91,8 @@ class ExtendedReports extends AbstractExternalModule
                 case 'DataExport/report_delete_ajax.php': $this->deleteReport($report_id); break;                
                 default: break;
             }
-        } else if (PAGE=='api/index.php' && API===true && isset($_POST['report_id']) && isset($_POST['content']) && $_POST['content']==='report') {
+        } else if (PAGE=='api/index.php' && //API===true && 
+                isset($_POST['report_id']) && isset($_POST['content']) && $_POST['content']==='report') {
             $this->apiReportExport();
             // $this->exitAfterHook(); when successfull
         }
@@ -114,7 +117,7 @@ class ExtendedReports extends AbstractExternalModule
             $extendedReport = $this->getExtendedAttributes($_GET['report_id']);
 
             if (!is_null($extendedReport) && $extendedReport['rpt-is-sql']) {
-                $this->includeSqlOption(false, $extendedReport['rpt-sql']);
+                $this->includeSqlOption(false, $this->stripTabs($extendedReport['rpt-sql']), $extendedReport['rpt-sql-disable-dag-filter']);
             }
         } else {
             // report list page - tweak buttons for export/stats
@@ -220,8 +223,9 @@ class ExtendedReports extends AbstractExternalModule
      * - Only super users may enter or edit SQL queries
      * - Regular users may still edit report title, description, user view/edit access and public visibility
      */
-    protected function includeSqlOption($create=true, $sql='') {
+    protected function includeSqlOption($create=true, $sql='', $disableDagFilter=null) {
         global $lang;
+        $disableDagFilter = (is_null($disableDagFilter)) ? 'false' : "$disableDagFilter";
         $queryLines = (empty(trim($sql)))?'':preg_split("/\r?\n|\r/", trim($sql));
         $displaycb = ($create) ? 'block' : 'none';
         $displayta = ($create) ? 'none' : 'block';
@@ -264,6 +268,9 @@ class ExtendedReports extends AbstractExternalModule
                     }
                     hideRptTrs();
                 }
+                if (<?=$disableDagFilter?>) {
+                    $('input[name=rpt-sql-disable-dag-filter]').prop('checked', true);
+                }
             });
         </script>
         <?php
@@ -281,10 +288,7 @@ class ExtendedReports extends AbstractExternalModule
         global $db;
         $report_id = 0;
         $result = $this->query("select auto_increment as next_report_id from information_schema.tables where table_schema=? and table_name='redcap_reports'",[$db]);
-        while($row = $result->fetch_assoc()){
-            $report_id = $row['next_report_id'];
-        }
-        return $report_id;
+        return $result->fetch_assoc()['next_report_id'];
     }
 
     /**
@@ -304,12 +308,15 @@ class ExtendedReports extends AbstractExternalModule
             $_POST['rpt-is-sql'] = true;
             $_POST['advanced_logic'] = '['.$Proj->table_pk.']=""'; // never return any records if somehow run without sql
 
-            $_POST['rpt-sql'] = rtrim(trim($_POST['rpt-sql']), ";");
+            $_POST['rpt-sql'] = rtrim(trim($this->stripTabs($_POST['rpt-sql'])), ";");
             if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){
                 throw new Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']);
             }
         }
-        
+        if (array_key_exists('rpt-sql-disable-dag-filter', $_POST) && $_POST['rpt-sql-disable-dag-filter']=='on') {
+            $_POST['rpt-sql-disable-dag-filter'] = true;
+        }
+
         $rptConfig = $this->getSubSettings('report-config');
         $isNew = true;
         foreach($rptConfig as $idx => $rpt) {
@@ -325,13 +332,16 @@ class ExtendedReports extends AbstractExternalModule
         
         $projectSettings['report-config'][$reportIndex] = true;
 
-        foreach($config['project-settings'][0]['sub_settings'] as $subSetting) {
-            $settingKey = $subSetting['key'];
-            if ($settingKey==='report-id') {
-                $projectSettings['report-id'][$reportIndex] = "$report_id";
-            } else if (array_key_exists($settingKey, $_POST)) {
-                $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey];
-            } 
+        foreach($config['project-settings'] as $projectSettingArray) {
+            if ($projectSettingArray['key']!=='report-config') continue;
+            foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
+                $settingKey = $subSettingAttrs['key'];
+                if ($settingKey==='report-id') {
+                    $projectSettings['report-id'][$reportIndex] = "$report_id";
+                } else if (array_key_exists($subSettingAttrs['key'], $_POST)) {
+                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey];
+                } 
+            }
         }
         $this->setProjectSettings($projectSettings);
 
@@ -408,20 +418,20 @@ class ExtendedReports extends AbstractExternalModule
         return null;
     }
 
-    protected function doExtendedReport($extendedAttributes, $format, $csvDelimiter=null, $decimalCharacter=null) {
+    protected function doExtendedReport($extendedAttributes, $format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
         $csvDelimiter = (empty($csvDelimiter)) ? UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
         $csvDelimiter = (empty($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
         $decimalCharacter = (empty($decimalCharacter)) ? UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
         $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
         if (array_key_exists('rpt-is-sql', $extendedAttributes) && $extendedAttributes['rpt-is-sql']) {
-            return $this->doSqlReport($extendedAttributes['rpt-sql'], $format, $csvDelimiter, $decimalCharacter);
+            return $this->doSqlReport($extendedAttributes['rpt-sql'], $format, $csvDelimiter, $decimalCharacter, $extendedAttributes['rpt-sql-disable-dag-filter']);
         } else {
             // ... extended
         }
     }
 
-    protected function doSqlReport($sql, $format, $csvDelimiter, $decimalCharacter) {
+    protected function doSqlReport($sql, $format, $csvDelimiter, $decimalCharacter, $disableDagFilter=false) {
         global $lang,$Proj,$user_rights,$project_id;
     
         $sql = rtrim(trim($sql), ";");
@@ -450,7 +460,7 @@ class ExtendedReports extends AbstractExternalModule
                 $thead[] = $f->name;
             }
 
-            if ($includesPk && $user_rights['group_id']) {
+            if ($includesPk && $user_rights['group_id'] && !$disableDagFilter) {
                 // if sql query includes pk field then filter by user's DAG
                 $recordFilter = array();
                 $result1 = $this->query("select distinct record from redcap_data where project_id=? and field_name='__GROUPID__' and `value`=?",[$Proj->project_id,$user_rights['group_id']]);
@@ -615,7 +625,7 @@ class ExtendedReports extends AbstractExternalModule
         if (!isset($_POST['token']) || !isset($_POST['content']) || $_POST['content']!='report' || !isset($_POST['report_id']) ) return;
 		if (empty($_POST['report_id'])) return;
 
-        $format = (isset($_POST['format'])) ? \htmlspecialchars($_POST['format']) : 'xml';
+        $format = (isset($_POST['format'])) ? \htmlspecialchars($_POST['format'], ENT_QUOTES) : 'xml';
 
         switch ($format) {
             case 'csv':
@@ -628,7 +638,7 @@ class ExtendedReports extends AbstractExternalModule
         }
 
         // get pid for report
-        $report_id = \htmlspecialchars($_POST['report_id']);
+        $report_id = \htmlspecialchars($_POST['report_id'], ENT_QUOTES);
         $result = $this->query("select project_id from redcap_reports where report_id=?",[$report_id]);
         while($row = $result->fetch_assoc()){
             $pid = $row['project_id'];
@@ -639,9 +649,9 @@ class ExtendedReports extends AbstractExternalModule
         if (is_null($extendedAttributes)) return; // no extensions on this report - return
 
         $url = APP_PATH_WEBROOT_FULL.'api/';
-        $returnFormat = (isset($_POST['returnFormat'])) ? \htmlspecialchars($_POST['returnFormat']) : $format;
-        $csvDelimiter = (isset($_POST['csvDelimiter'])) ? \htmlspecialchars($_POST['csvDelimiter']) : null;
-        $decimalCharacter = (isset($_POST['decimalCharacter'])) ? \htmlspecialchars($_POST['decimalCharacter']) : null;
+        $returnFormat = (isset($_POST['returnFormat'])) ? \htmlspecialchars($_POST['returnFormat'], ENT_QUOTES) : $format;
+        $csvDelimiter = (isset($_POST['csvDelimiter'])) ? \htmlspecialchars($_POST['csvDelimiter'], ENT_QUOTES) : null;
+        $decimalCharacter = (isset($_POST['decimalCharacter'])) ? \htmlspecialchars($_POST['decimalCharacter'], ENT_QUOTES) : null;
         $params = array(
             'token' => $_POST['token'],
             'content' => $_POST['content'],
@@ -662,7 +672,7 @@ class ExtendedReports extends AbstractExternalModule
         
         if (!defined("USERID")) {
             // set USERID from token in case needed for smart var piping 
-            $token = trim(\htmlspecialchars($_POST['token']));
+            $token = trim(\htmlspecialchars($_POST['token'], ENT_QUOTES));
             $ur = $this->query("select ur.username, ui.super_user from redcap_user_rights ur inner join redcap_user_information ui on ur.username=ui.username where ur.api_token=? and project_id=? and user_suspended_time is null limit 1", [ $token, $project_id ]);
             while($row = $ur->fetch_assoc()){
                 $user = $row['username'];
@@ -688,5 +698,20 @@ class ExtendedReports extends AbstractExternalModule
     
         $this->exitAfterHook();
         return;
+    }
+
+    public function stripTabs($str, $replace="  ") {
+        /*// not sure why these aren't working!
+        $s1 = str_replace('\\t','  ',$str);
+        $s2 = str_replace('\t','  ',$str);
+        $s3 = str_replace('	','  ',$str);
+        $s4 = preg_replace('/\t/g', '  ', $str);
+        $s5 = preg_replace('/\s/g', '  ', $str);*/
+        $rtn = "";
+        $split = preg_split('//u', $str, -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($split as $char) {
+            $rtn .= (ord($char)===9) ? $replace : $char;
+        }
+        return $rtn;
     }
 }

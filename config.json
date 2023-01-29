@@ -9,10 +9,7 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 8,
-    "compatibility": {
-        "redcap-version-min": "11.1.1"
-    },
+    "framework-version": 9,
     "permissions": [
         "redcap_every_page_before_render",
         "redcap_every_page_top"
@@ -44,6 +41,12 @@
                     "key": "rpt-sql",
                     "name": "Report SQL",
                     "type": "textarea",
+                    "super-users-only": true
+                },
+                {
+                    "key": "rpt-sql-disable-dag-filter",
+                    "name": "Disable DAG filter?<p class=\"my-0 text-muted\">Disable automatic filtering of results by user's DAG when results contain column matching record id field</p>",
+                    "type": "checkbox",
                     "super-users-only": true
                 },
                 {
