@@ -77,9 +77,9 @@ $dialog_content = (array_key_exists('content',$dialog)) ? $dialog['content'] : $
 /******************************************************************************
  * Extract the doc id of the generated file (e.g. containing non-reshaped data)
  ******************************************************************************/
-$pattern = (REDCap::versionCompare(REDCAP_VERSION, '5.0.0', '>='))
+$pattern = (REDCap::versionCompare(REDCAP_VERSION, '13.0.0', '>='))
     ? "\?pid={$Proj->project_id}&amp;route=FileRepositoryController:download&amp;id=(\d+)\">"
-    : "FileRepository/file_download.php\?pid={$Proj->project_id}&amp;id=(\d+)\">";
+    : "FileRepository\/file_download.php\?pid={$Proj->project_id}&amp;id=(\d+)\">";
 $matches = array();
 $match = preg_match("/$pattern/", $dialog_content, $matches);
 $doc_id = (count($matches)>0) ? $matches[1] : false;
