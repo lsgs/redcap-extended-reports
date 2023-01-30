@@ -26,14 +26,18 @@
 global $Proj;
 
 $url = APP_PATH_WEBROOT_FULL."redcap_v".REDCAP_VERSION."/DataExport/data_export_ajax.php?pid=".$Proj->project_id."&xml_metadata_options=&extended_report_hook_bypass=1";
-$params = $_POST;
 $timeout = null;
 $content_type = 'application/x-www-form-urlencoded';
 $basic_auth_user_pass = '';
- 
+
 $cookieString = '';
 foreach ($_COOKIE as $key => $value) {
-    $cookieString.="$key=$value; ";
+    $cookieString.=REDCap::escapeHtml($key)."=".REDCap::escapeHtml($value)."; ";
+}
+
+$params = array();
+foreach ($_POST as $key => $value) {
+    $params[REDCap::escapeHtml($key)] = REDCap::escapeHtml($value);
 }
 
 $params['redcap_csrf_token'] = $this->getCSRFToken();
