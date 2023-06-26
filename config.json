@@ -50,10 +50,30 @@
                     "super-users-only": true
                 },
                 {
-                    "key": "rpt-is-reshaped",
-                    "name": "Reshape specified?",
-                    "type": "checkbox",
-                    "super-users-only": false
+                    "key": "rpt-reshape-event",
+                    "name": "Event reshape option",
+                    "super-users-only": false,
+                    "type": "dropdown",
+                    "choices": [
+                        { "value": "ef", "name": "Columns ordered by event then field" },
+                        { "value": "fe", "name": "Columns ordered by field then event" }
+                    ]
+                },
+                {
+                    "key": "rpt-reshape-instance",
+                    "name": "Repeating instance reshape option",
+                    "super-users-only": false,
+                    "type": "dropdown",
+                    "choices": [
+                        { "value": "cols", "name": "Column per instance" },
+                        { "value": "first", "name": "First instance only" },
+                        { "value": "last", "name": "Last instance only" },
+                        { "value": "min", "name": "Minimum value" },
+                        { "value": "max", "name": "Maximum value" },
+                        { "value": "conc_space", "name": "Concatenate with space" },
+                        { "value": "conc_comma", "name": "Concatenate with comma" },
+                        { "value": "conc_pipe", "name": "Concatenate with pipe" }
+                    ]
                 }
             ]
         }

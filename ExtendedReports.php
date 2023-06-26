@@ -7,94 +7,82 @@
 namespace MCRI\ExtendedReports;
 
 use ExternalModules\AbstractExternalModule;
-use DataExport;
-use Exception;
-use Piping;
-use Project;
-use RCView;
-use REDCap;
-use RestUtility;
-use UIState;
-use User;
+
+require_once 'Report.php';
 
 class ExtendedReports extends AbstractExternalModule
 {
     protected const SQL_OPTION_TD0_HTML = '<b><i class="fas fa-th mr-1"></i>Custom SQL Query</b><div class="wrap" style="color:#888;font-size:11px;line-height:12px;margin-top:5px;">Administrators only<br>SELECT queries only</div>';
-    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox" style="height:45px;font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
-    protected const SQL_OPTION_TD1_HTML_PLEB = '<span style="font-size: large;" class="text-muted">MAG<i class="fas fa-magic"></i>C</span>';
-    protected const DEFAULT_CSV_DELIMITER = ',';
-    protected const DEFAULT_CSV_LINE_END = PHP_EOL;
-    protected const DEFAULT_ESCAPE_CHAR = '"';
-    protected const DEFAULT_DECIMAL_CHAR = '.';
-    protected static $csvInjectionChars = array("-", "@", "+", "=");
+    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox" style="height:45px;font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box to <strong>disable DAG filtering</strong> <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
+    protected const SQL_OPTION_TD1_HTML_PLEB = '<span class="rpt-sql-pleb">MAG<i class="fas fa-magic rpt-sql-wiggle5" style="margin-right:-5px;"></i>C<sup><i class="far fa-star rpt-sql-wiggle5 ml-1" style="font-size:85%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:70%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:50%"></sup></span>';
+    protected $report_id = null;
 
     /**
      * redcap_every_page_before_render($project_id=null)
      * Catch a report view or export and if there's some "extended" config apply the necessary tweaks.
      */
     public function redcap_every_page_before_render($project_id=null) {
-        global $user_rights;
         // $a = 'what does new report save look like?'; // report_edit_ajax.php $_GET report_id=0 &_POST: __TITLE__ description rpt-sql field(array) etc.
         // $b = 'what does existing report save look like?'; // report_edit_ajax.php $_GET: report_id &_POST: __TITLE__ description rpt-sql field(array) etc.
         // $c = 'what does viewing a report look like?'; // report_ajax.php $_GET: pagenum $_POST: report_id Return list ($report_table, $num_results_returned)
         // $d = 'what does downloading a report look like?'; // data_export_ajax.php $_POST: export_format report_id
         // $e = 'what does an api download of a report look like?'; // PAGE=='api/index.php' && API==true:  no project context, need to do separate api call to verify token & permissions and process json result according to extension attributes
+        if (!(isset($_POST['report_id']) || isset($_GET['report_id']))) return;
+        $this->report_id = $_POST['report_id'] ?? $_GET['report_id'] ?? null;
+        if (!is_numeric($this->report_id)) return; // can be 'ALL' or 'SELECTED'
 
+        // is this an API report export?
+        if (
+            PAGE=='api/index.php' && //API===true && 
+            isset($_POST['report_id']) && isset($_POST['content']) && $_POST['content']==='report'
+           ) {
+            $this->apiReportExport();
+            // $this->exitAfterHook(); when successfull
+            return;
+        }
+
+        global $user_rights;
+        
+        $report = new Report($project_id, intval($this->report_id), $this);
 
         if (PAGE=='DataExport/report_edit_ajax.php' && count($_POST)) {
             // saving a new report -> save custom settings using incremented max redcap_reports.report_id ($_GET['report_id']==0)
             // saving existing report -> save custom settings using report_id = $_GET['report_id']
-
-            // check whether $_POST has any extended attributes to save
-            foreach(array_keys($_POST) as $key) {
-                if(strpos($key, 'rpt-')===0 && !empty($_POST[$key])) {
-                    try {
-                        $this->saveReport(\htmlspecialchars($_GET['report_id'], ENT_QUOTES));
-                    } catch (Exception $ex) {
-                        REDCap::logEvent('Extended Reports module', 'Report save failed \n<br> '.$ex->getMessage());
-                    }
-                    break;
-                }
+            try {
+                $this->saveReport($this->report_id);
+            } catch (\Exception $ex) {
+                \REDCap::logEvent('Extended Reports module', 'Report save failed \n<br> '.$ex->getMessage());
             }
 
         } else if (PAGE == 'DataExport/report_ajax.php') {
             // viewing a report - get the html to display
-            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id'], ENT_QUOTES));
-
-            if (!is_null($extendedReport)) {
-                $this->viewReport($extendedReport);
+            if ($report->is_extended) {
+                $report->viewReport();
                 $this->exitAfterHook();
             }
 
         } else if (PAGE == 'DataExport/data_export_ajax.php') {
             // exporting a report - get the export files (only csvraw and csvlabel export option gets any manipulation)
-            $extendedReport = $this->getExtendedAttributes(\htmlspecialchars($_POST['report_id'], ENT_QUOTES));
-
-            if (!is_null($extendedReport) && (\htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvraw' || \htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvlabels')) {
+            if ($report->is_extended && (\htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvraw' || \htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvlabels')) {
                 if(!isset($_GET['extended_report_hook_bypass'])) {
-                    $this->exportReport($extendedReport);
+                    $report->exportReport();
                     $this->exitAfterHook();
                 }
             }
 
         } else if (isset($_POST['report_id']) && (PAGE == 'DataExport/report_copy_ajax.php' || PAGE == 'DataExport/report_delete_ajax.php')) {
             // copying or deleting a report
-            $report_id = \htmlspecialchars($_POST['report_id'], ENT_QUOTES);
-            $report = DataExport::getReports($report_id);
-            if (empty($report)) return;
+            $deReport = \DataExport::getReports($this->report_id);
+            if (empty($deReport)) return;
 
-            $reports_edit_access = DataExport::getReportsEditAccess(USERID, $user_rights['role_id'], $user_rights['group_id'], $_POST['report_id']);
+            $reports_edit_access = \DataExport::getReportsEditAccess(USERID, $user_rights['role_id'], $user_rights['group_id'], $this->report_id);
             if (empty($reports_edit_access)) return;
 
             switch (PAGE) {
-                case 'DataExport/report_copy_ajax.php': $this->copyReport($report_id); break;                
-                case 'DataExport/report_delete_ajax.php': $this->deleteReport($report_id); break;                
+                case 'DataExport/report_copy_ajax.php': $this->copyReport($this->report_id); break;                
+                case 'DataExport/report_delete_ajax.php': $this->deleteReport($this->report_id); break;                
                 default: break;
             }
-        } else if (PAGE=='api/index.php' && //API===true && 
-                isset($_POST['report_id']) && isset($_POST['content']) && $_POST['content']==='report') {
-            $this->apiReportExport();
-            // $this->exitAfterHook(); when successfull
         }
     }
     
@@ -105,28 +93,29 @@ class ExtendedReports extends AbstractExternalModule
         if (PAGE!='DataExport/index.php') return;
         if (!defined("USERID")) return; // in case logging in on data export page - $this->getUser() throws exception
 
-        if ($this->getUser()->isSuperUser() && isset($_GET['create']) && isset($_GET['addedit'])) {
-            // creating a new report, give option to super users for sql report
-            $this->includeSqlOption(true);
-            $this->includeReshapeOptions();
+        if (isset($_GET['create']) && isset($_GET['addedit'])) {
+            if ($this->getUser()->isSuperUser()) $this->includeSqlOption(true); // creating a new report, give option to super users for sql report
+            $this->includeReshapeOptions(new Report($project_id, 0, $this));
             return;
         } 
         
         if (isset($_GET['report_id'])) {
+/*
+            $report = new Report(intval($project_id), intval($_GET['report_id']), $this);
 
-            $extendedReport = $this->getExtendedAttributes($_GET['report_id']);
-
-            if (!is_null($extendedReport) && $extendedReport['rpt-is-sql']) {
-                $this->includeSqlOption(false, $this->stripTabs($extendedReport['rpt-sql']), $extendedReport['rpt-sql-disable-dag-filter']);
-            }
+            if ($report->is_extended && $report->is_sql) {
+                $this->includeSqlOption(false, $this->stripTabs($report->sql_query), $report->sql_disable_dag_filter);
+            } else {
+                $this->includeReshapeOptions($report);
+            }*/
         } else {
             // report list page - tweak buttons for export/stats
             $rptConfig = $this->getSubSettings('report-config');
             $extendedReports = array();
             foreach($rptConfig as $rpt) {
-                if ($rpt['rpt-is-sql'] || $rpt['rpt-is-reshaped']) {
+                if ($rpt['rpt-is-sql'] || $rpt['rpt-reshape-event'] || $rpt['rpt-reshape-instance']) {
                     $extension = ($rpt['rpt-is-sql']) ? 1 : 0;
-                    $extension = ($rpt['rpt-is-reshaped']) ? 2 : $extension;
+                    $extension = ($rpt['rpt-reshape-event'] || $rpt['rpt-reshape-instance']) ? 2 : $extension;
                     $extendedReports[] = array('id'=>$rpt['report-id'],'ext'=>$extension);
                 }
             }
@@ -143,11 +132,12 @@ class ExtendedReports extends AbstractExternalModule
                         setTimeout(function(){
                           em.extrpts.forEach(function(e){
                             if (e.ext===1) {
-                                $('#reprow_'+e.id+' td').eq(2).find('div.wrap').append('<span class="mx-1 text-muted"><i class="fas fa-th"></i></span>'); 
-                                $('#reprow_'+e.id).find('i.fa-chart-bar').parent('button').hide(); // hide Stats & Charts for SQL reports
+                                 // mark SQL reports and hide Stats & Charts button
+                                $('#reprow_'+e.id+' td').eq(2).find('div.wrap').append('<span class="mx-1 text-muted"><i class="far fa-star"></i></span>'); 
+                                $('#reprow_'+e.id).find('i.fa-chart-bar').parent('button').hide();
                                 nSql++;
                             } else if (e.ext===2) {
-                                $('#reprow_'+e.id+' td').eq(2).find('div.wrap').append('<span class="mx-1 text-muted"><i class="fas fa-grip-vertical"></i><i class="fas fa-grip-horizontal ml-1"></i></span>'); 
+                                $('#reprow_'+e.id+' td').eq(2).find('div.wrap').append('<span class="mx-1 text-muted"><i class="fas fa-shapes"></i></span>'); 
                                 nReshape++;
                             }
                           });
@@ -178,7 +168,7 @@ class ExtendedReports extends AbstractExternalModule
                                         case '1': // SQL Report
                                             $('#exportFormatDialog > div').eq(0).hide(); // "Select your export settings..."
                                             $('#exportFormatForm table td:nth-child(2)').hide(); /* de-identification options */
-                                            $('#export_choices_table tr:nth-child(n+2)').hide(); /* export options except CSV Raw */
+                                            $('#export_choices_table tr:nth-child(n+3)').hide(); /* export options except CSV Raw/Labels */
                                             $('select[name=returnBlankForGrayFormStatus]').closest('div').hide(); /* export 0 for grey status */
                                             break;
 
@@ -186,35 +176,18 @@ class ExtendedReports extends AbstractExternalModule
                                         default:
                                             $('#exportFormatDialog > div').eq(0).show(); // "Select your export settings..."
                                             $('#exportFormatForm table td:nth-child(2)').show(); /* de-identification options */
-                                            $('#export_choices_table tr:nth-child(n+2)').show(); /* all export options */
+                                            $('#export_choices_table tr:nth-child(n+3)').show(); /* all export options */
                                             $('select[name=returnBlankForGrayFormStatus]').closest('div').show(); /* export 0 for grey status */
                                             break;
                                     }
-
                                 }
                             });
                         }
-
                     });
                 </script>
                 <?php
             }
         }
-
-    }
-
-    /**
-     * getExtendedAttributes
-     * Read any module settings for the specified report id
-     */
-    public function getExtendedAttributes($report_id, $pid=null) {
-        $rptConfig = $this->getSubSettings('report-config', $pid);
-        foreach($rptConfig as $rpt) {
-            if ($rpt['report-id']==$report_id) {
-                return $rpt;
-            }
-        }
-        return null;
     }
 
     /**
@@ -223,14 +196,32 @@ class ExtendedReports extends AbstractExternalModule
      * - Only super users may enter or edit SQL queries
      * - Regular users may still edit report title, description, user view/edit access and public visibility
      */
-    protected function includeSqlOption($create=true, $sql='', $disableDagFilter=null) {
+    protected function includeSqlOption($create=true, $sql='', $disableDagFilter=false) {
         global $lang;
-        $disableDagFilter = (is_null($disableDagFilter)) ? 'false' : "$disableDagFilter";
         $queryLines = (empty(trim($sql)))?'':preg_split("/\r?\n|\r/", trim($sql));
         $displaycb = ($create) ? 'block' : 'none';
         $displayta = ($create) ? 'none' : 'block';
         $td0Html = static::SQL_OPTION_TD0_HTML;
-        $td1Html = ($this->getUser()->isSuperUser()) ? static::SQL_OPTION_TD1_HTML_ADMIN : static::SQL_OPTION_TD1_HTML_PLEB;
+        if ($this->getUser()->isSuperUser()) {
+            $td1Html = static::SQL_OPTION_TD1_HTML_ADMIN;
+        } else {
+            $td1Html = static::SQL_OPTION_TD1_HTML_PLEB;
+            ?>
+            <style type="text/css">
+                .rpt-sql-pleb { color: #800000; font-size: x-large; font-style: italic; font-family: "MS PGothic",Osaka,Arial,sans-serif; }
+                .rpt-sql-wiggle5 { animation: wiggle 5s linear infinite; }
+                @keyframes wiggle {
+                    0%, 10% { transform: rotateZ(0); }
+                    12% { transform: rotateZ(-15deg); }
+                    14% { transform: rotateZ(10deg); }
+                    16% { transform: rotateZ(-10deg); }
+                    18% { transform: rotateZ(6deg); }
+                    20% { transform: rotateZ(-4deg); }
+                    22%, 100% { transform: rotateZ(0); }
+                }
+            </style>
+            <?php
+        }
         ?>
         <style type="text/css">
             #rpt-sql-check { display: <?=$displaycb?>; }
@@ -268,25 +259,105 @@ class ExtendedReports extends AbstractExternalModule
                     }
                     hideRptTrs();
                 }
-                if (<?=$disableDagFilter?>) {
+                <?php if ($disableDagFilter) { ?>
                     $('input[name=rpt-sql-disable-dag-filter]').prop('checked', true);
+                <?php } ?>
+            });
+        </script>
+        <?php
+    }
+
+    /**
+     * includeReshapeOptions(Report report)
+     * Include additional HTML, JS and CSS for reshaping options on the report editing page 
+     * param Report $report
+     */
+    protected function includeReshapeOptions(Report $report) {
+        // check that project has multiple events and/or at least one repeating form
+        global $Proj;
+        if (!$Proj->longitudinal && !$Proj->hasRepeatingFormsEvents()) return;
+
+        $selected = 'selected="selected"';
+        $reshapeEventOptions = array(
+            ''=>array('label'=>'-- default (row per event) --','selected'=>''),
+            'ef'=>array('label'=>'Columns ordered by event then field','selected'=>''),
+            'fe'=>array('label'=>'Columns ordered by field then event','selected'=>'')
+        );
+        $reshapeEventOptions[$report->reshape_event]['selected'] = $selected;
+        $reshapeInstanceOptions = array(
+            ''=>array('label'=>'-- default (row per instance) --','selected'=>''),
+            'cols'=>array('label'=>'Column per instance','selected'=>''),
+            'conc_space'=>array('label'=>'Concatenate all values with space','selected'=>''),
+            'conc_comma'=>array('label'=>'Concatenate all values with comma','selected'=>''),
+            'conc_pipe'=>array('label'=>'Concatenate all values with |','selected'=>''),
+            'min'=>array('label'=>'Minimum value','selected'=>''),
+            'max'=>array('label'=>'Maximum value','selected'=>''),
+            'first'=>array('label'=>'Value from first instance','selected'=>''),
+            'last'=>array('label'=>'Value from last instance','selected'=>'')
+        );
+        $reshapeInstanceOptions[$report->reshape_instance]['selected'] = $selected;
+
+        $step5MarkupE = $step5MarkupI = '';
+        if ($Proj->longitudinal) { 
+            $step5MarkupE .= '<td class="labelrc" style="width:120px;">Events</td>';
+            $step5MarkupE .= '<td class="labelrc" colspan="3">';
+            $step5MarkupE .= '<div class="nowrap">';
+            $step5MarkupE .= '<select class="x-form-text x-form-field sort-dropdown" style="width:100%;max-width:260px;" name="rpt-reshape-event">';
+            foreach ($reshapeEventOptions as $opt => $prop) {
+                $step5MarkupE .= '<option value="'.$opt.'" '.$prop['selected'].'>'.$prop['label'].'</option>';
+            }
+            $step5MarkupE .= '</select></div></td>';
+        }
+        if ($Proj->hasRepeatingFormsEvents()) {
+            $step5MarkupI .= '<td class="labelrc" style="width:120px;">Instances</td>';
+            $step5MarkupI .= '<td class="labelrc" colspan="3">';
+            $step5MarkupI .= '<div class="nowrap">';
+            $step5MarkupI .= '<select class="x-form-text x-form-field sort-dropdown" style="width:100%;max-width:260px;" name="rpt-reshape-instance">';
+            foreach ($reshapeInstanceOptions as $opt => $prop) {
+                $step5MarkupI .= '<option value="'.$opt.'" '.$prop['selected'].'>'.$prop['label'].'</option>';
+            }
+            $step5MarkupI .= '</select></div></td>';
+        }
+        ?>
+        <style type="text/css">.ext-rpt-step5 { display:table-row; } </style>
+        <script type="text/javascript">
+            $(document).ready(function(){
+                $('#create_report_table tbody')
+                    .append('<tr class="nodrop ext-rpt-step5">'+
+                        '<td class="labelrc create_rprt_hdr" colspan="4" style="padding:0;background:#fff;border-left:0;border-right:0;height:45px;" valign="bottom">'+
+                        '<div style="color:#444;position:relative;top:10px;background-color:#e0e0e0;border:1px solid #ccc;border-bottom:1px solid #ddd;float:left;padding:5px 8px;"><i class="fas fa-cube mr-1" title="External Module: Extended Reports"></i>STEP 5</div></td></tr>'
+                    )
+                    .append('<tr class="nodrop ext-rpt-step5">'+
+                        '<td class="labelrc create_rprt_hdr" colspan="4" valign="bottom"><i class="fas fa-shapes mx-1" style="vertical-align:top"></i>Row-Per-Record Reshaping <span style="font-weight:normal;">(optional)</span></td></tr>'
+                    )
+                    .append('<tr class="nodrop ext-rpt-step5"><?=$step5MarkupE?></tr>')
+                    .append('<tr class="nodrop ext-rpt-step5"><?=$step5MarkupI?></tr>');
+                if ($('select[name=rpt-reshape-event],select[name=rpt-reshape-instance]').length==2) {
+                    // both longitudinal and with instances -> must select either no reshaping or option for both
+                    $('#save-report-btn').attr('onclick', null);
+                    $('#save-report-btn').on('click', function(){
+                            let reshapeEventOpt = $('select[name=rpt-reshape-event]').val();
+                            let reshapeInstanceOpt = $('select[name=rpt-reshape-instance]').val();
+                            if (reshapeEventOpt=='' && reshapeInstanceOpt!=='') {
+                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instanecs.<br>Event option not selected.');
+                            } else if (reshapeEventOpt!=='' && reshapeInstanceOpt=='') {
+                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instanecs.<br>Instance option not selected.');
+                            } else {
+                                saveReport(<?=$report->report_id?>);
+                            }
+                        });
+
                 }
             });
         </script>
         <?php
     }
 
-    protected function includeReshapeOptions() {
-        // check that project has multiple events and/or a repeating form
-    }
-
-
     /** 
      * Look up what the next report id will be in the redcap_reports table
      */
     protected function getNextReportId() {
         global $db;
-        $report_id = 0;
         $result = $this->query("select auto_increment as next_report_id from information_schema.tables where table_schema=? and table_name='redcap_reports'",[$db]);
         return $result->fetch_assoc()['next_report_id'];
     }
@@ -303,6 +374,17 @@ class ExtendedReports extends AbstractExternalModule
             $report_id = $this->getNextReportId();
         }
 
+        $rptConfig = $this->getSubSettings('report-config');
+        $hasEMConfig = false;
+        foreach($rptConfig as $idx => $rpt) {
+            if ($rpt['report-id']==$report_id) {
+                $hasEMConfig = true;
+                break;
+            }
+        }
+        $reportIndex = ($hasEMConfig) ? $idx : count($rptConfig);
+
+        
         // tweaks to $_POST for settings that are not submitted from client
         if (array_key_exists('rpt-sql', $_POST) && $_POST['rpt-sql']!='') {
             $_POST['rpt-is-sql'] = true;
@@ -310,23 +392,26 @@ class ExtendedReports extends AbstractExternalModule
 
             $_POST['rpt-sql'] = rtrim(trim($this->stripTabs($_POST['rpt-sql'])), ";");
             if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){
-                throw new Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']);
+                throw new \Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']);
             }
         }
         if (array_key_exists('rpt-sql-disable-dag-filter', $_POST) && $_POST['rpt-sql-disable-dag-filter']=='on') {
             $_POST['rpt-sql-disable-dag-filter'] = true;
         }
 
-        $rptConfig = $this->getSubSettings('report-config');
-        $isNew = true;
-        foreach($rptConfig as $idx => $rpt) {
-            if ($rpt['report-id']==$report_id) {
-                $isNew = false;
-                break;
+        // check whether $_POST has any extended attributes to save
+        $numAttrVals = 0;
+        foreach(array_keys($_POST) as $key) {
+            if (strpos($key, 'rpt-')===0 && !empty($_POST[$key])) {
+                $numAttrVals++;
             }
         }
-        $reportIndex = ($isNew) ? count($rptConfig) : $idx;
 
+        // if report exists in em config AND there are no non-empty rpt- attribute values - can return
+        if (!$hasEMConfig && $numAttrVals==0) return;
+
+        // if report exists in em config and only empty rpt- attr values submitted then record in em config
+        // if report not yet in em config and non-empty rpt- attr values submitted then record in em config
         $projectSettings = $this->getProjectSettings();
         $config = $this->getConfig();
         
@@ -345,7 +430,7 @@ class ExtendedReports extends AbstractExternalModule
         }
         $this->setProjectSettings($projectSettings);
 
-        $this->log("save report", array_merge(['is-new'=>$isNew], $rpt));
+        $this->log("save report", array_merge(['is-new'=>!$hasEMConfig], $rpt));
         
         return null;
     }
@@ -372,10 +457,13 @@ class ExtendedReports extends AbstractExternalModule
         $config = $this->getConfig();
         
         $projectSettings['report-config'][] = true;
-        foreach($config['project-settings'][0]['sub_settings'] as $subSetting) {
-            $settingKey = $subSetting['key'];
-            $settingValue = ($subSetting['type']=='checkbox') ? (bool) $rpt[$settingKey] : $rpt[$settingKey];
-            $projectSettings[$settingKey][] = $settingValue;
+        foreach($config['project-settings'] as $projectSettingArray) {
+            if ($projectSettingArray['key']!=='report-config') continue;
+            foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
+                $settingKey = $subSettingAttrs['key'];
+                $settingValue = ($subSettingAttrs['type']=='checkbox') ? (bool) $rpt[$settingKey] : $rpt[$settingKey];
+                $projectSettings[$settingKey][] = $settingValue;
+            }
         }
 
         $this->setProjectSettings($projectSettings);
@@ -406,210 +494,20 @@ class ExtendedReports extends AbstractExternalModule
         unset($projectSettings['report-config'][$erIdx]);
         reset($projectSettings['report-config']);
 
-        foreach($config['project-settings'][0]['sub_settings'] as $subSetting) {
-            $settingKey = $subSetting['key'];
-            unset($projectSettings[$settingKey][$erIdx]);
-            reset($projectSettings[$settingKey]);
+        foreach($config['project-settings'] as $projectSettingArray) {
+            if ($projectSettingArray['key']!=='report-config') continue;
+            foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
+                $settingKey = $subSettingAttrs['key'];
+                unset($projectSettings[$settingKey][$erIdx]);
+                reset($projectSettings[$settingKey]);
+            }
         }
+
         $this->setProjectSettings($projectSettings);
 
         $this->log("delete report", ['report-id'=>$report_id, 'extended-report-index'=>$erIdx]);
 
         return null;
-    }
-
-    protected function doExtendedReport($extendedAttributes, $format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
-        $csvDelimiter = (empty($csvDelimiter)) ? UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
-        $csvDelimiter = (empty($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
-        $decimalCharacter = (empty($decimalCharacter)) ? UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
-        $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
-
-        if (array_key_exists('rpt-is-sql', $extendedAttributes) && $extendedAttributes['rpt-is-sql']) {
-            return $this->doSqlReport($extendedAttributes['rpt-sql'], $format, $csvDelimiter, $decimalCharacter, $extendedAttributes['rpt-sql-disable-dag-filter']);
-        } else {
-            // ... extended
-        }
-    }
-
-    protected function doSqlReport($sql, $format, $csvDelimiter, $decimalCharacter, $disableDagFilter=false) {
-        global $lang,$Proj,$user_rights,$project_id;
-    
-        $sql = rtrim(trim($sql), ";");
-        $sql = Piping::pipeSpecialTags($sql, $project_id); // user and misc tags will work
-        if (!preg_match("/^select\s/i", $sql)) {
-            return array('Not a select query', 0);
-		}
-
-        $filteredRows = array();
-        $thead = array();
-        $output = array();
-
-        try {
-            $result = $this->query($sql,[]);
-        } catch (Exception $ex) {
-            $output[] = $ex->getMessage();
-            $output[] = 0;
-            return $output;
-        }
-        
-        if ($result) {
-            $finfo = $result->fetch_fields();
-            $includesPk = false;
-            foreach ($finfo as $f) {
-                if ($f->name==$Proj->table_pk) $includesPk = true;
-                $thead[] = $f->name;
-            }
-
-            if ($includesPk && $user_rights['group_id'] && !$disableDagFilter) {
-                // if sql query includes pk field then filter by user's DAG
-                $recordFilter = array();
-                $result1 = $this->query("select distinct record from redcap_data where project_id=? and field_name='__GROUPID__' and `value`=?",[$Proj->project_id,$user_rights['group_id']]);
-                while($row = $result1->fetch_assoc()){
-                    $recordFilter[] = $row['record'];
-                }
-                $result1->free();
-            } else {
-                $recordFilter = false;
-            }
-
-            while($row = $result->fetch_assoc()){
-                if (!$recordFilter || (is_array($recordFilter) && in_array($row[$Proj->table_pk], $recordFilter))) {
-                    $filteredRows[] = $row;
-                }
-            }
-            $result->free();
-        }
-
-        $num_results_returned = count($filteredRows);
-        $return_content = '';
-
-        if ($format=='html') {
-            $report_table = '';
-            if ($num_results_returned === 0) {
-                $report_table='<table id="report_table" class="dataTable cell-border" style="table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;"><thead><tr></tr></thead><tbody><tr class="odd"><td style="color:#777;border:1px solid #ccc;padding:10px 15px !important;" colspan="0">No results were returned</td></tr></tbody></table>';
-            } else {
-                //"<table id='report_table' class='dataTable cell-border' style='table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;'><thead><tr><th>Study ID<div class="rpthdr">record_<wbr>id</div></th><th>Event Name<div class="rpthdr">redcap_<wbr>event_<wbr>name</div></th><th>Repeat Instrument<div class="rpthdr">redcap_<wbr>repeat_<wbr>instrument</div></th><th>Repeat Instance<div class="rpthdr">redcap_<wbr>repeat_<wbr>instance</div></th></tr></thead><tr class="odd"><td><a href="/redcap_v10.7.1/DataEntry/record_home.php?pid=244&amp;id=1&amp;arm=1" class="rl">1</a>&nbsp; <span class="crl">Alice Adams</span></td><td>Person</td><td class='nodesig'></td><td class='nodesig'></td></tr><tr class="even"><td><a href="/redcap_v10.7.1/DataEntry/index.php?pid=244&amp;id=1&amp;page=event&amp;event_id=1494&amp;instance=1" class="rl">1</a>&nbsp; <span class="crl">Alice Adams</span></td><td>Event</td><td></td><td>1</td></tr><tr class="odd"><td><a href="/redcap_v10.7.1/DataEntry/record_home.php?pid=244&amp;id=2&amp;arm=1" class="rl""
-                $report_table = "<table id='report_table' class='dataTable cell-border' style='table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;'><thead><tr>";
-                foreach($thead as $th) {
-                    $title = (array_key_exists($th, $Proj->metadata)) ? REDCap::filterHtml($Proj->metadata[$th]['element_label']) : $th;
-                    $title = (\strlen($title) > 50) ? \substr($title, 0, 30).'...'.\substr($title, -17, 17) : $title;
-                    $report_table .= "<th><div class=\"mr-3\">$title<div class=\"rpthdr\">$th</div></div></th>";
-                }
-                $report_table .= "</tr></thead><tbody>";
-                
-                for ($i=0; $i<count($filteredRows); $i++) {
-                    $rowclass = ($i%2) ? 'even' : 'odd';
-                    $report_table .= "<tr class=\"$rowclass\">";
-                    foreach ($filteredRows[$i] as $field => $td) {
-                        if(is_numeric($td) && is_float(0+$td)) {
-                            $report_table .= "<td>".str_replace('.',$decimalCharacter,"$td",1)."</td>";
-                        } else if ($field==$Proj->table_pk) {
-                            $report_table .= "<td><a target='_blank' href='".APP_PATH_WEBROOT."DataEntry/record_home.php?pid=$project_id&id=$td'>$td</a></td>";
-                        } else {
-                            $report_table .= "<td>$td</td>";
-                        }
-                    }
-                    $report_table .= "</tr>";
-                }
-            }
-            $return_content = $report_table;
-
-        } else if ($format=='csvraw' || $format=='csvlabel') { 
-            $return_content = ""; // If no results will return empty CSV with no headers (follows pattern of regualr data exports)
-            if ($num_results_returned > 0) {
-
-                foreach($thead as $th) {
-                    $return_content .= $this->makeCsvValue($th, $csvDelimiter).$csvDelimiter;
-                }
-                $return_content = rtrim($return_content, $csvDelimiter).static::DEFAULT_CSV_LINE_END;
-                
-                foreach ($filteredRows as $row) {
-                    foreach ($row as $td) {
-                        $return_content .= $this->makeCsvValue($td, $csvDelimiter, $decimalCharacter).$csvDelimiter;
-                    }
-                    $return_content = rtrim($return_content, $csvDelimiter).static::DEFAULT_CSV_LINE_END;
-                }
-            }
-
-        } else if ($format=='json') { 
-            $content = array(); // If no results will return empty array (follows pattern of regualr data exports)
-            if ($num_results_returned > 0) {
-                foreach ($filteredRows as $row) {
-                    $rowObj = new \stdClass();
-                    foreach ($row as $field => $value) {
-                        $rowObj->$field = $value;
-                    }
-                    $content[] = $rowObj;
-                }
-            }
-
-            $output[] = \json_encode($content);
-            $output[] = $num_results_returned;
-
-        } else if ($format=='xml') { 
-            $indent = '    ';
-            $return_content = '<?xml version="1.0" encoding="UTF-8" ?>'.PHP_EOL.'<records>';
-            
-            if ($num_results_returned > 0) { // If no results will return empty records node (follows pattern of regualr data exports)
-                foreach ($filteredRows as $row) {
-                    $return_content .= PHP_EOL.$indent.'<item>';
-                    foreach ($row as $field => $value) {
-                        $return_content .= PHP_EOL.$indent.$indent."<$field>";
-                        $return_content .= PHP_EOL.$indent.$indent.$indent."<![CDATA[$value]]>";
-                        $return_content .= PHP_EOL.$indent.$indent."</$field>";
-                    }
-                    $return_content .= PHP_EOL.$indent.'</item>';
-                }
-            }
-            $return_content = trim($return_content).'</records>';
-        }
-
-        $output[] = trim($return_content);
-        $output[] = $num_results_returned;
-        return $output;
-    }
-
-    protected function makeCsvValue($value="", $delimiter="", $decimalCharacter="") {
-        $delimiter = ($delimiter==="") ? static::DEFAULT_CSV_DELIMITER : $delimiter;
-        $decimalCharacter = ($decimalCharacter==="") ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
-        $value = trim($value);
-        if (in_array(substr($value, 0, 1), self::$csvInjectionChars)) {
-            // Prevent CSV injection for Excel - add space in front if first character is -, @, +, or = (http://georgemauer.net/2017/10/07/csv-injection.html)
-            $value = " $value";
-        }
-        if (strpos($value, static::DEFAULT_ESCAPE_CHAR)!==false) {
-            // If value contains " then escape as "" e.g. A quote: "Wow!". -> "A quote: ""Wow!""."
-            $value = static::DEFAULT_ESCAPE_CHAR . str_replace(static::DEFAULT_ESCAPE_CHAR, static::DEFAULT_ESCAPE_CHAR.static::DEFAULT_ESCAPE_CHAR, $value) . static::DEFAULT_ESCAPE_CHAR;
-        } else if (strpos($value, $delimiter)!==false) {
-            // If value contains a comma (and no ") then wrap with "
-            $value = static::DEFAULT_ESCAPE_CHAR.$value.static::DEFAULT_ESCAPE_CHAR;
-        } else if(is_numeric($value) && is_float(0+$value)) {
-            $value = str_replace('.',$decimalCharacter,"$value",1);
-        }
-        return $value;
-    }
-
-    protected function doReshapedReport($extendedReport) {
-        global $lang;
-        return array('reshaped report', 0);
-    }
-
-    /**
-     * viewReport($extendedAttributes)
-     * Get HTML of extended report for display
-     * See viewReport.php
-     */
-    protected function viewReport($extendedAttributes) {
-        require_once 'viewReport.php';
-    }
-
-    /**
-     * exportReport($extendedAttributes)
-     * Get HTML of CSV file download dialog
-     * See exportReport.php
-     */
-    protected function exportReport($extendedAttributes) {
-        require_once 'exportReport.php';
     }
 
     /**
@@ -625,7 +523,7 @@ class ExtendedReports extends AbstractExternalModule
         if (!isset($_POST['token']) || !isset($_POST['content']) || $_POST['content']!='report' || !isset($_POST['report_id']) ) return;
 		if (empty($_POST['report_id'])) return;
 
-        $format = (isset($_POST['format'])) ? \htmlspecialchars($_POST['format'], ENT_QUOTES) : 'xml';
+        $format = (isset($_POST['format'])) ? $this->escape($_POST['format']) : 'xml';
 
         switch ($format) {
             case 'csv':
@@ -638,26 +536,29 @@ class ExtendedReports extends AbstractExternalModule
         }
 
         // get pid for report
-        $report_id = \htmlspecialchars($_POST['report_id'], ENT_QUOTES);
+        $report_id = intval($_POST['report_id']);
         $result = $this->query("select project_id from redcap_reports where report_id=?",[$report_id]);
         while($row = $result->fetch_assoc()){
             $pid = $row['project_id'];
         }
 
 		if (empty($pid)) return;
-        $extendedAttributes = $this->getExtendedAttributes($report_id, $pid);
-        if (is_null($extendedAttributes)) return; // no extensions on this report - return
+
+        $report = new Report($pid, $report_id, $this);
+
+        if (!$report->is_extended) return; // no extensions on this report - return
 
         $url = APP_PATH_WEBROOT_FULL.'api/';
-        $returnFormat = (isset($_POST['returnFormat'])) ? \htmlspecialchars($_POST['returnFormat'], ENT_QUOTES) : $format;
-        $csvDelimiter = (isset($_POST['csvDelimiter'])) ? \htmlspecialchars($_POST['csvDelimiter'], ENT_QUOTES) : null;
-        $decimalCharacter = (isset($_POST['decimalCharacter'])) ? \htmlspecialchars($_POST['decimalCharacter'], ENT_QUOTES) : null;
+        $token = trim($this->escape($_POST['token']));
+        $returnFormat = (isset($_POST['returnFormat'])) ? $this->escape($_POST['returnFormat']) : $format;
+        $csvDelimiter = (isset($_POST['csvDelimiter'])) ? $this->escape($_POST['csvDelimiter']) : null;
+        $decimalCharacter = (isset($_POST['decimalCharacter'])) ? $this->escape($_POST['decimalCharacter']) : null;
         $params = array(
-            'token' => $_POST['token'],
-            'content' => $_POST['content'],
+            'token' => $token,
+            'content' => $this->escape($_POST['content']),
             'format' => 'json',
-            'returnFormat' => 'json',
-            'report_id' => $_POST['report_id'],
+            'returnFormat' => $returnFormat,
+            'report_id' => $report_id,
             'extended_reports_background_call' => 1
         );
 
@@ -666,13 +567,17 @@ class ExtendedReports extends AbstractExternalModule
         $resultArray = \json_decode($result, true);
         if (array_key_exists('error', $resultArray)) return; // error with call (e.g. permissions) - let it proceed and fail again for the user in the usual way
 
-        global $Proj, $project_id;
-        $Proj = new Project($pid);
+        // set project context
+        global $Proj, $project_id, $longitudinal;
+        $Proj = new \Project($pid, true);
         $project_id = $Proj->project_id;
+        $longitudinal = $Proj->longitudinal;
+        if (!defined('PROJECT_ID')) {
+            define('PROJECT_ID', $project_id);
+        }
         
         if (!defined("USERID")) {
             // set USERID from token in case needed for smart var piping 
-            $token = trim(\htmlspecialchars($_POST['token'], ENT_QUOTES));
             $ur = $this->query("select ur.username, ui.super_user from redcap_user_rights ur inner join redcap_user_information ui on ur.username=ui.username where ur.api_token=? and project_id=? and user_suspended_time is null limit 1", [ $token, $project_id ]);
             while($row = $ur->fetch_assoc()){
                 $user = $row['username'];
@@ -682,20 +587,19 @@ class ExtendedReports extends AbstractExternalModule
             if (!defined("SUPER_USER")) define("SUPER_USER", $super);
 		}
 
-        if (array_key_exists('rpt-is-sql', $extendedAttributes) && $extendedAttributes['rpt-is-sql']) {
-            // sql report - result will be empty
-            list($data_content, $num_records_returned) = $this->doExtendedReport($extendedAttributes, $format, $csvDelimiter, $decimalCharacter);
-
-            if (!defined("REDCAP_API_NO_EXIT")) define("REDCAP_API_NO_EXIT", true); // this prevents sendResponse() doing exit(), which causes EM framework to throw exceptions
-
-            RestUtility::sendResponse(200, $data_content, $format);
-
-        } else {
-            // extended report - process $result as per config
-            // $resultArray ...
-            return; //temp until implemented
+        try {
+            list($data_content, $num_records_returned) = $report->doExtendedReport($format, $csvDelimiter, $decimalCharacter);
+        } catch (\Exception $ex) {
+            switch ($returnFormat) {
+                case 'csv': $data_content = $ex->getMessage(); break;
+                case 'json': '{error:'.$data_content = $ex->getMessage().'}'; break;
+                default: // xml
+                    $data_content = '<?xml version="1.0" encoding="UTF-8" ?><error>'.$ex->getMessage().'</error>';
+                    break;
+            }
         }
-    
+        if (!defined("REDCAP_API_NO_EXIT")) define("REDCAP_API_NO_EXIT", true); // this prevents sendResponse() doing exit(), which causes EM framework to throw exceptions
+        \RestUtility::sendResponse(200, $data_content, $format);
         $this->exitAfterHook();
         return;
     }
