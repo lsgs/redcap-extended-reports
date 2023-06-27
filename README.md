@@ -9,17 +9,17 @@ Luke Stevens, Murdoch Children's Research Institute https://www.mcri.edu.au
 
 Provides some extensions & additional functionality for REDCap's built-in Data Exports & Reports functionality.
 - Row per record output for reports with longitudinal data or data from repeating instruments.
-- Custom SQL output (administrator configuration only)
+- Custom SQL report view and CSV export (including via API). Administrator-only set up.
 
 ********************************************************************************
-## Row-Per-Record Results
+## Row-Per-Record Reshaping
 ### Configuration
 The module enables REDCap's standard row-per-record-per-event and row-per-record-per-instance results to be collapsed to row-per-record.
 
 #### Events
 Options for reshaping event rows to columns are:
-* Reshape by event then field (default): by event, each field e.g. event_1_arm_1.var1, event_1_arm_1.var2, event_2_arm_1.var1, event_2_arm_1.var2
-* Reshape by field then event: by field, each event e.g. event_1_arm_1.var1, event_2_arm_1.var1, event_1_arm_1.var2, event_2_arm_1.var2 
+* Reshape by event then field (default): by event, each field e.g.  `event_1_arm_1.var1, event_1_arm_1.var2, event_2_arm_1.var1, event_2_arm_1.var2`
+* Reshape by field then event: by field, each event e.g.  `event_1_arm_1.var1, event_2_arm_1.var1, event_1_arm_1.var2, event_2_arm_1.var2`
 
 #### Repeating Events/Instruments
 Options for handling repeating data - repeating events or repeating instruments - are:
@@ -37,11 +37,11 @@ With the "Column per instance" option, field names will incorporate event and in
 * Labels CSV, repeating instrument: EventLabel\[ ArmLabel\] FieldLabel #Instance
 (Arm label included only if project has multiple arms)
 
-### Exports
-No row-per-record collapsing is applied to stats package or ODM exports.
+### Exporting Reshaped Reports
+Row-per-record reshaping is **not** applied to stats package or ODM exports.
 
 ### "Longitudinal Reports" Plugin
-The functionality of this external module differs in some respects from the old (pre-external module framework) "Longitudinal Reports" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reproting with SQL reports. The external module renders the plugin obsolete.
+The functionality of this external module differs in some respects from the old (pre-external module framework) "[https://github.com/lsgs/redcap-longitudinal-reports/](Longitudinal Reports)" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reproting with SQL reports. The external module renders the plugin obsolete.
 
 ********************************************************************************
 ## SQL Reports 

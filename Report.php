@@ -395,19 +395,18 @@ class Report
                     $rowclass = ($i%2) ? 'even' : 'odd';
                     $table_body .= "<tr class=\"$rowclass\">";
                     foreach ($rows[$i] as $fieldIdx => $td) {
-                        if ($headers[$fieldIdx]['instance_count']===0) {
-                            $thisFieldValue = $this->makeOutputValue($td, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
-                            foreach ($thisFieldValue as $thisValue) {
-                                $table_body .= $this->makeTD($thisValue);
-                            }
-                        } else {
-                            // $td will be an array of instance values (arrays for checkboxes)
-                            // count($td) == $headers[$fieldIdx]['instance_count']
+                        if ($headers[$fieldIdx]['instance_count']>0 && $this->reshape_instance==='cols') {
+                            // for split instances $td will be an array of instance values (array of arrays for checkboxes)
                             foreach ($td as $thisInstanceTd) {
                                 $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
                                 foreach ($thisFieldValue as $thisValue) {
                                     $table_body .= $this->makeTD($thisValue);;
                                 }
+                            }
+                        } else {
+                            $thisFieldValue = $this->makeOutputValue($td, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                            foreach ($thisFieldValue as $thisValue) {
+                                $table_body .= $this->makeTD($thisValue);
                             }
                         }
                     }
@@ -430,19 +429,18 @@ class Report
                 foreach ($rows as $row) {
                     foreach ($row as $fldIdx => $td) {
                         $thisField = $headers[$fldIdx];
-                        if ($headers[$fldIdx]['instance_count']===0) {
-                            $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $format, $decimalCharacter, $csvDelimiter);
-                            foreach ($thisFieldValue as $thisValue) {
-                                $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
-                            }
-                        } else {
-                            // $td will be an array of instance values (arrays for checkboxes)
-                            // count($td) == $headers[$fieldIdx]['instance_count']
+                        if ($headers[$fldIdx]['instance_count']>0 && $this->reshape_instance==='cols') {
+                            // for split instances $td will be an array of instance values (array of arrays for checkboxes)
                             foreach ($td as $thisInstanceTd) {
                                 $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fldIdx]['field_name'], $format, $decimalCharacter);
                                 foreach ($thisFieldValue as $thisValue) {
                                     $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                                 }
+                            }
+                        } else {
+                            $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $format, $decimalCharacter, $csvDelimiter);
+                            foreach ($thisFieldValue as $thisValue) {
+                                $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                             }
                         }
                     }
@@ -614,33 +612,21 @@ class Report
             $thisHdr['is_repeating_form'] = $Proj->isRepeatingForm($thisHdr['event_id'], $Proj->metadata[$thisHdr['field_name']]['form_name']);
             $thisHdr['instance_count'] = 0;
             if ($thisHdr['is_repeating_event'] || $thisHdr['is_repeating_form']) {
-                switch ($this->reshape_instance) {
-                    case 'cols':
-                        $hasSplitCbOrInstances = true;
-                        $instrumentKey = ($thisHdr['is_repeating_form']) ? $Proj->metadata[$thisHdr['field_name']]['form_name'] : '';
-                        $fieldMaxInstance = 0;
-                        foreach ($report_data as $thisRec) {
-                            if (
-                                array_key_exists($thisHdr['event_id'], $thisRec['repeat_instances']) &&
-                                array_key_exists($instrumentKey, $thisRec['repeat_instances'][$thisHdr['event_id']]) 
-                            ) {
-                                $thisRecMaxInstance = intval(array_key_last($thisRec['repeat_instances'][$thisHdr['event_id']][$instrumentKey]));
-                            } else {
-                                $thisRecMaxInstance = 0;
-                            }
-                            $fieldMaxInstance = ($thisRecMaxInstance > $fieldMaxInstance) ? $thisRecMaxInstance : $fieldMaxInstance;
-                        }
-                        $thisHdr['instance_count'] = $fieldMaxInstance;
-                        break;
-                    case 'first':
-                    case 'last':
-                    case 'min':
-                    case 'max':
-                    case 'conc_space':
-                    case 'conc_comma':
-                    case 'conc_pipe':
-                    default: // all these cases only one col per var
-                }    
+                $hasSplitCbOrInstances = $hasSplitCbOrInstances || $this->reshape_instance==='cols';
+                $instrumentKey = ($thisHdr['is_repeating_form']) ? $Proj->metadata[$thisHdr['field_name']]['form_name'] : '';
+                $fieldMaxInstance = 0;
+                foreach ($report_data as $thisRec) {
+                    if (
+                        array_key_exists($thisHdr['event_id'], $thisRec['repeat_instances']) &&
+                        array_key_exists($instrumentKey, $thisRec['repeat_instances'][$thisHdr['event_id']]) 
+                    ) {
+                        $thisRecMaxInstance = intval(array_key_last($thisRec['repeat_instances'][$thisHdr['event_id']][$instrumentKey]));
+                    } else {
+                        $thisRecMaxInstance = 0;
+                    }
+                    $fieldMaxInstance = ($thisRecMaxInstance > $fieldMaxInstance) ? $thisRecMaxInstance : $fieldMaxInstance;
+                }
+                $thisHdr['instance_count'] = $fieldMaxInstance;
             }
 
             $headers[] = $thisHdr;
@@ -700,14 +686,14 @@ class Report
                                             $thisInstanceValue = (float)$thisInstanceValue;
                                             $thisRecValue = (float)$thisRecValue;
                                         }
-                                        $thisRecValue = ($thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                        $thisRecValue = ($thisRecValue=='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         break;
                                     case 'max':
                                         if (is_numeric($thisInstanceValue)) {
                                             $thisInstanceValue = (float)$thisInstanceValue;
                                             $thisRecValue = (float)$thisRecValue;
                                         }
-                                        $thisRecValue = ($thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                        $thisRecValue = ($thisRecValue=='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         break;
                                     case 'conc_space':
                                         $thisRecValue .= "$thisInstanceValue ";
@@ -728,9 +714,9 @@ class Report
                                     foreach(array_values($thisHeader['subvalues']) as $sv) {
                                         $emptyCbTd[$sv] = '';
                                     }
-                                    $thisRecValue[] = $emptyCbTd;
+                                    $thisRecValue = $emptyCbTd;
                                 } else {
-                                    $thisRecValue[] = '';
+                                    $thisRecValue = '';
                                 }
                             }
                         }
@@ -869,7 +855,7 @@ class Report
             }
         }
 
-        if ($th['instance_count'] > 0) {
+        if ($th['instance_count'] > 0 && $this->reshape_instance==='cols') {
             $colCount = $th['instance_count'];
             if ($th['is_repeating_event']) {
                 $pattern =  "|e|$sep|i|$sep|v|";
