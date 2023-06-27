@@ -556,93 +556,94 @@ class Report
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
         $headers = array();
-        if (!empty($this->reshape_event)) {
-            $eventUniqueNames = \REDCap::getEventNames(true);
+        $eventUniqueNames = \REDCap::getEventNames(true);
 
-            $efResult = $this->module->query("select count(*) as num_filter_events from redcap_reports_filter_events where report_id=?",[$this->report_id]);
-            $num_filter_events = $efResult->fetch_assoc()['num_filter_events'];
-    
-            $sql = 'select r.report_id, r.project_id, ea.arm_id, ea.arm_name, em.event_id, em.descrip, ';
-            $sql .= ($num_filter_events > 0) ? 'if(rfe.event_id is null,0,1) ' : '1 ';
-            $sql .= 'as in_filter, ef.form_name, rf.field_name, rf.field_order, m.element_type
-              from redcap_reports r
-              inner join redcap_events_arms ea on r.project_id=ea.project_id
-              inner join redcap_events_metadata em on ea.arm_id=em.arm_id
-              inner join redcap_events_forms ef on em.event_id=ef.event_id
-              inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
-              inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name 
-              ';
-            if ($num_filter_events > 0) {
-                $sql .= 'inner join redcap_reports_filter_events rfe on r.report_id=rfe.report_id and em.event_id=rfe.event_id ';
+        $efResult = $this->module->query("select count(*) as num_filter_events from redcap_reports_filter_events where report_id=?",[$this->report_id]);
+        $num_filter_events = $efResult->fetch_assoc()['num_filter_events'];
+
+        $sql = 'select r.report_id, r.project_id, ea.arm_id, ea.arm_name, em.event_id, em.descrip, ';
+        $sql .= ($num_filter_events > 0) ? 'if(rfe.event_id is null,0,1) ' : '1 ';
+        $sql .= 'as in_filter, ef.form_name, rf.field_name, rf.field_order, m.element_type
+            from redcap_reports r
+            inner join redcap_events_arms ea on r.project_id=ea.project_id
+            inner join redcap_events_metadata em on ea.arm_id=em.arm_id
+            inner join redcap_events_forms ef on em.event_id=ef.event_id
+            inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
+            inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name 
+            ';
+        if ($num_filter_events > 0) {
+            $sql .= 'inner join redcap_reports_filter_events rfe on r.report_id=rfe.report_id and em.event_id=rfe.event_id ';
+        }
+        
+        if ($this->reshape_event=='ef') {
+            // order columns by arm then event then field
+            $sql .= 'where r.report_id=? order by ea.arm_num, em.day_offset, em.event_id, rf.field_order';
+        } else if ($this->reshape_event=='fe') {
+            // order columns by field then arm then event
+            $sql .= 'where r.report_id=? order by rf.field_order, ea.arm_num, em.day_offset, em.event_id';
+        } else {
+            // no events - repeating instances only
+            $sql .= 'where r.report_id=? order by rf.field_order';
+        }
+        
+        $columnsResult = $this->module->query($sql, [$this->report_id]);
+        $hasSplitCbOrInstances = false;
+
+        while($thisHdr = $columnsResult->fetch_assoc()){
+            $thisHdr['unique_name'] = $eventUniqueNames[$thisHdr['event_id']];
+
+            $thisHdr['element_label'] = $Proj->metadata[$thisHdr['field_name']]['element_label'];
+            if ($thisHdr['field_name'] == $thisHdr['form_name'].'_complete') {
+                $thisHdr['element_label'] = $Proj->forms[$thisHdr['form_name']]['menu'].' '.$thisHdr['element_label']; // "Form Name Complete?"
             }
-            
-            if ($this->reshape_event=='ef') {
-                // order columns by arm then event then field
-                $sql .= 'where r.report_id=? order by ea.arm_num, em.day_offset, em.event_id, rf.field_order';
-            } else if ($this->reshape_event=='fe') {
-                // order columns by field then arm then event
-                $sql .= 'where r.report_id=? order by rf.field_order, ea.arm_num, em.day_offset, em.event_id';
+
+            // handle non-combined checkbox and instance columns here
+            if ($thisHdr['element_type']=='checkbox' && !$this->report_attr['combine_checkbox_values']) {
+                $hasSplitCbOrInstances = true;
+
+                // *******************************************
+                // TODO handle missing value checkbox columns?
+                // *******************************************
+                $thisHdr['subvalues'] = array_keys(\parseEnum($Proj->metadata[$thisHdr['field_name']]['element_enum']));
+            } else {
+                $thisHdr['subvalues'] = array();
             }
-            
-            $columnsResult = $this->module->query($sql, [$this->report_id]);
-            $hasSplitCbOrInstances = false;
 
-            while($thisHdr = $columnsResult->fetch_assoc()){
-                $thisHdr['unique_name'] = $eventUniqueNames[$thisHdr['event_id']];
-
-                $thisHdr['element_label'] = $Proj->metadata[$thisHdr['field_name']]['element_label'];
-                if ($thisHdr['field_name'] == $thisHdr['form_name'].'_complete') {
-                    $thisHdr['element_label'] = $Proj->forms[$thisHdr['form_name']]['menu'].' '.$thisHdr['element_label']; // "Form Name Complete?"
-                }
-
-                // handle non-combined checkbox and instance columns here
-                if ($thisHdr['element_type']=='checkbox' && !$this->report_attr['combine_checkbox_values']) {
-                    $hasSplitCbOrInstances = true;
-
-                    // *******************************************
-                    // TODO handle missing value checkbox columns?
-                    // *******************************************
-                    $thisHdr['subvalues'] = array_keys(\parseEnum($Proj->metadata[$thisHdr['field_name']]['element_enum']));
-                } else {
-                    $thisHdr['subvalues'] = array();
-                }
-
-                // handle instance columns here
-                $thisHdr['is_repeating_event'] = $Proj->isRepeatingEvent($thisHdr['event_id']);
-                $thisHdr['is_repeating_form'] = $Proj->isRepeatingForm($thisHdr['event_id'], $Proj->metadata[$thisHdr['field_name']]['form_name']);
-                $thisHdr['instance_count'] = 0;
-                if ($thisHdr['is_repeating_event'] || $thisHdr['is_repeating_form']) {
-                    switch ($this->reshape_instance) {
-                        case 'cols':
-                            $hasSplitCbOrInstances = true;
-                            $instrumentKey = ($thisHdr['is_repeating_form']) ? $Proj->metadata[$thisHdr['field_name']]['form_name'] : '';
-                            $fieldMaxInstance = 0;
-                            foreach ($report_data as $thisRec) {
-                                if (
-                                    array_key_exists($thisHdr['event_id'], $thisRec['repeat_instances']) &&
-                                    array_key_exists($instrumentKey, $thisRec['repeat_instances'][$thisHdr['event_id']]) 
-                                ) {
-                                    $thisRecMaxInstance = intval(array_key_last($thisRec['repeat_instances'][$thisHdr['event_id']][$instrumentKey]));
-                                } else {
-                                    $thisRecMaxInstance = 0;
-                                }
-                                $fieldMaxInstance = ($thisRecMaxInstance > $fieldMaxInstance) ? $thisRecMaxInstance : $fieldMaxInstance;
+            // handle instance columns here
+            $thisHdr['is_repeating_event'] = $Proj->isRepeatingEvent($thisHdr['event_id']);
+            $thisHdr['is_repeating_form'] = $Proj->isRepeatingForm($thisHdr['event_id'], $Proj->metadata[$thisHdr['field_name']]['form_name']);
+            $thisHdr['instance_count'] = 0;
+            if ($thisHdr['is_repeating_event'] || $thisHdr['is_repeating_form']) {
+                switch ($this->reshape_instance) {
+                    case 'cols':
+                        $hasSplitCbOrInstances = true;
+                        $instrumentKey = ($thisHdr['is_repeating_form']) ? $Proj->metadata[$thisHdr['field_name']]['form_name'] : '';
+                        $fieldMaxInstance = 0;
+                        foreach ($report_data as $thisRec) {
+                            if (
+                                array_key_exists($thisHdr['event_id'], $thisRec['repeat_instances']) &&
+                                array_key_exists($instrumentKey, $thisRec['repeat_instances'][$thisHdr['event_id']]) 
+                            ) {
+                                $thisRecMaxInstance = intval(array_key_last($thisRec['repeat_instances'][$thisHdr['event_id']][$instrumentKey]));
+                            } else {
+                                $thisRecMaxInstance = 0;
                             }
-                            $thisHdr['instance_count'] = $fieldMaxInstance;
-                            break;
-                        case 'first':
-                        case 'last':
-                        case 'min':
-                        case 'max':
-                        case 'conc_space':
-                        case 'conc_comma':
-                        case 'conc_pipe':
-                        default: // all these cases only one col per var
-                    }    
-                }
+                            $fieldMaxInstance = ($thisRecMaxInstance > $fieldMaxInstance) ? $thisRecMaxInstance : $fieldMaxInstance;
+                        }
+                        $thisHdr['instance_count'] = $fieldMaxInstance;
+                        break;
+                    case 'first':
+                    case 'last':
+                    case 'min':
+                    case 'max':
+                    case 'conc_space':
+                    case 'conc_comma':
+                    case 'conc_pipe':
+                    default: // all these cases only one col per var
+                }    
+            }
 
-                $headers[] = $thisHdr;
-            }    
+            $headers[] = $thisHdr;
         }
 
         // include dag header if selected for report
@@ -676,7 +677,7 @@ class Report
                     // loop through instance data incrementing instance id until found all 
                     // there may be gaps in the instance number sequence if some have been deleted
                     $instrumentKey = ($thisHeader['is_repeating_form']) ? $Proj->metadata[$thisHeader['field_name']]['form_name'] : '';
-                    $thisHdrInstances = $report_data[$returnRecord]['repeat_instances'][$thisHeader['event_id']][$instrumentKey];
+                    $thisHdrInstances = $report_data[$returnRecord]['repeat_instances'][$thisHeader['event_id']][$instrumentKey] ?? array();
 
                     if ($this->reshape_instance=='first') {
                         $key = array_key_first($thisHdrInstances);
@@ -769,7 +770,7 @@ class Report
         if ($thRow===1) {
             $headerCell = $this->makeReportColTitle($th);
         } else {
-            if ($th['instance_count'] > 1) {
+            if ($th['instance_count'] > 0) {
                 for ($i=1; $i <= $th['instance_count']; $i++) {
                     if (count($th['subvalues'])===0) {
                         // instance of field other than checkbox
@@ -816,6 +817,8 @@ class Report
                     $title = "$evtLabel<br>$fldLabel";
                 } else if ($this->reshape_event=='fe') {
                     $title = "$fldLabel<br>$evtLabel";
+                } else {
+                    $title = $fldLabel;  // instances only, no events
                 }
             }
             if ($this->report_attr['report_display_header']!=='LABEL') $title .= "<div class=\"rpthdr\">$fldName</div>";
@@ -871,11 +874,11 @@ class Report
             if ($th['is_repeating_event']) {
                 $pattern =  "|e|$sep|i|$sep|v|";
             } else { // is_repeating_form
-                $pattern =  "|e|$sep|v|$sep|i|";
+                $pattern =  ($Proj->longitudinal) ? "|e|$sep|v|$sep|i|" : "|v|$sep|i|";
             }
         } else {
             $colCount = 1;
-            if ($th['field_name'] == $Proj->table_pk) {
+            if (!$Proj->longitudinal || $th['field_name'] == $Proj->table_pk) {
                 $pattern =  "|v|";
             } else {
                 $pattern =  "|e|$sep|v|";

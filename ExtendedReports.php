@@ -100,14 +100,14 @@ class ExtendedReports extends AbstractExternalModule
         } 
         
         if (isset($_GET['report_id'])) {
-/*
+
             $report = new Report(intval($project_id), intval($_GET['report_id']), $this);
 
             if ($report->is_extended && $report->is_sql) {
                 $this->includeSqlOption(false, $this->stripTabs($report->sql_query), $report->sql_disable_dag_filter);
             } else {
                 $this->includeReshapeOptions($report);
-            }*/
+            }
         } else {
             // report list page - tweak buttons for export/stats
             $rptConfig = $this->getSubSettings('report-config');
