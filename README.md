@@ -37,8 +37,11 @@ With the "Column per instance" option, field names will incorporate event and in
 * Labels CSV, repeating instrument: EventLabel\[ ArmLabel\] FieldLabel #Instance
 (Arm label included only if project has multiple arms)
 
+### Live Filters
+Live filters are **not supported** (mainly because they're not supported by the `REDCap::getReport()` developer method).
+
 ### Exporting Reshaped Reports
-Row-per-record reshaping is **not** applied to stats package or ODM exports.
+Row-per-record reshaping is **not** applied to stats package (SAS, SPSS, R, Stata) or ODM exports.
 
 ### "Longitudinal Reports" Plugin
 The functionality of this external module differs in some respects from the old (pre-external module framework) "[https://github.com/lsgs/redcap-longitudinal-reports/](Longitudinal Reports)" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reproting with SQL reports. The external module renders the plugin obsolete.

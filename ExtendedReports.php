@@ -54,7 +54,7 @@ class ExtendedReports extends AbstractExternalModule
                 \REDCap::logEvent('Extended Reports module', 'Report save failed \n<br> '.$ex->getMessage());
             }
 
-        } else if (PAGE == 'DataExport/report_ajax.php') {
+        } else if (PAGE == 'DataExport/report_ajax.php' || (\DataExport::isPublicReport() && isset($_POST['report_id']))) {
             // viewing a report - get the html to display
             if ($report->is_extended) {
                 $report->viewReport();
@@ -94,13 +94,12 @@ class ExtendedReports extends AbstractExternalModule
         if (!defined("USERID")) return; // in case logging in on data export page - $this->getUser() throws exception
 
         if (isset($_GET['create']) && isset($_GET['addedit'])) {
-            if ($this->getUser()->isSuperUser()) $this->includeSqlOption(true); // creating a new report, give option to super users for sql report
+            // creating a new report, give option to super users for sql report
+            if ($this->getUser()->isSuperUser()) $this->includeSqlOption(true); 
             $this->includeReshapeOptions(new Report($project_id, 0, $this));
-            return;
-        } 
-        
-        if (isset($_GET['report_id'])) {
 
+        } else if (isset($_GET['addedit']) && isset($_GET['report_id'])) {
+            // edit existing report
             $report = new Report(intval($project_id), intval($_GET['report_id']), $this);
 
             if ($report->is_extended && $report->is_sql) {
@@ -108,6 +107,9 @@ class ExtendedReports extends AbstractExternalModule
             } else {
                 $this->includeReshapeOptions($report);
             }
+        } else if (isset($_GET['report_id'])) {
+            // viewing report
+
         } else {
             // report list page - tweak buttons for export/stats
             $rptConfig = $this->getSubSettings('report-config');
