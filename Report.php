@@ -1092,7 +1092,7 @@ class Report
      * @param string $delimiter Override default delimiter character (,)
      * @return mixed $return string or array matching $value escaped for csv safety
      */
-    protected function makeCsvValue(mixed $value, $decimalCharacter="", $delimiter="") {
+    protected function makeCsvValue($value, $decimalCharacter="", $delimiter="") {
         $delimiter = ($delimiter==="") ? static::DEFAULT_CSV_DELIMITER : $delimiter;
         $decimalCharacter = ($decimalCharacter==="") ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
