@@ -432,7 +432,7 @@ class ExtendedReports extends AbstractExternalModule
         }
         $this->setProjectSettings($projectSettings);
 
-        $this->log("save report", array_merge(['is-new'=>!$hasEMConfig], $rpt));
+        $this->log("save report id $report_id", array_merge(['is-new'=>!$hasEMConfig], (is_null($rpt))?$_POST:$rpt));
         
         return null;
     }
@@ -470,7 +470,7 @@ class ExtendedReports extends AbstractExternalModule
 
         $this->setProjectSettings($projectSettings);
 
-        $this->log("copy report", array_merge(['copy-of'=>$report_id], $rpt));
+        $this->log("copy report in $report_id", array_merge(['copy-of'=>$report_id], $rpt));
 
         return null;
     }
@@ -507,7 +507,7 @@ class ExtendedReports extends AbstractExternalModule
 
         $this->setProjectSettings($projectSettings);
 
-        $this->log("delete report", ['report-id'=>$report_id, 'extended-report-index'=>$erIdx]);
+        $this->log("delete report id $report_id", ['report-id'=>$report_id, 'extended-report-index'=>$erIdx]);
 
         return null;
     }

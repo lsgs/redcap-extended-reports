@@ -729,6 +729,7 @@ class Report
                 $fieldMaxInstance = 0;
                 foreach ($report_data as $thisRec) {
                     if (
+                        array_key_exists('repeat_instances', $thisRec) &&
                         array_key_exists($thisHdr['event_id'], $thisRec['repeat_instances']) &&
                         array_key_exists($instrumentKey, $thisRec['repeat_instances'][$thisHdr['event_id']]) 
                     ) {
