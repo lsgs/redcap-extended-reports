@@ -481,7 +481,12 @@ class Report
             list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport();
         }
 
-        $num_results_returned = count($rows);
+        if (is_array($rows)) {
+            $num_results_returned = count($rows);
+        } else {
+            $this->module->log($rows);
+            $num_results_returned = 0;
+        }
         $return_content = '';
 
         if ($format=='html') {
