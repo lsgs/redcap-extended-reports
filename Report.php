@@ -478,7 +478,7 @@ class Report
             list($rows, $headers, $hasSplitCbOrInstances) = $this->doSqlReport();
             $this->report_attr['combine_checkbox_values'] = true;
         } else {
-            list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport();
+            list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport($format);
         }
 
         if (is_array($rows)) {
@@ -664,7 +664,7 @@ class Report
         return array($filteredRows, $headers, false);
     }
 
-    protected function doReshapedReport() {
+    protected function doReshapedReport($format) {
         global $lang, $Proj;
 
         $report_data = \REDCap::getReport($this->report_id, 'array', false, false); // note export as labels option does not work for 'array'
@@ -780,6 +780,12 @@ class Report
                 if ($thisHeader['is_repeating_event'] || $thisHeader['is_repeating_form']) {
                     // loop through instance data incrementing instance id until found all 
                     // there may be gaps in the instance number sequence if some have been deleted
+                    switch ($this->reshape_instance) {
+                        case 'conc_space': $sep = ' '; break;
+                        case 'conc_comma': $sep = ','; break;
+                        case 'conc_pipe': $sep = '|'; break;
+                        default: $sep = ''; break;
+                    }
                     $instrumentKey = ($thisHeader['is_repeating_form']) ? $Proj->metadata[$thisHeader['field_name']]['form_name'] : '';
                     $thisHdrInstances = $report_data[$returnRecord]['repeat_instances'][$thisHeader['event_id']][$instrumentKey] ?? array();
 
@@ -814,14 +820,11 @@ class Report
                                         $thisRecValue = ($thisRecValue=='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         break;
                                     case 'conc_space':
-                                        $thisRecValue .= "$thisInstanceValue ";
-                                        break; 
                                     case 'conc_comma':
-                                        $thisRecValue .= "$thisInstanceValue,";
-                                        break; 
                                     case 'conc_pipe':
-                                        $thisRecValue .= "$thisInstanceValue|";
-                                        break; 
+                                        $thisInstanceOutput = $this->makeOutputValue($thisInstanceValue, $thisHeader['field_name'], $format);
+                                        $thisRecValue .= ((empty($thisInstanceOutput))?'':$thisInstanceOutput[0]).$sep;
+                                        break;
                                     default:
                                         $thisRecValue = '';
                                         break;
@@ -839,11 +842,11 @@ class Report
                                 if ($this->reshape_instance==='cols') {
                                     $thisRecValue[] = $thisInstanceValue;
                                 } else {
-                                    $thisRecValue = $thisInstanceValue;
+                                    $thisRecValue .= $thisInstanceValue;
                                 }
                             }
                         }
-                        $thisRow[] = ($this->reshape_instance==='cols') ? $thisRecValue : rtrim($thisRecValue,' ,|');
+                        $thisRow[] = ($this->reshape_instance==='cols') ? $thisRecValue : rtrim($thisRecValue,$sep);
                     }
                 } else {
                     if (
@@ -1251,7 +1254,7 @@ class Report
                     $outValue = $this->makeChoiceDisplayHtml($val, $choices);
                     break;
                 case 'csvlabels':
-                    $outValue = $choices[$val];
+                    $outValue = (array_key_exists($val, $choices)) ? $choices[$val] : $val; // key won't exist for concat instances cols
                     break;
                 default:
                     $outValue = $val;
