@@ -1140,9 +1140,9 @@ class Report
         return $recordDisplay;
     }
 
-    protected function makeEventDisplay($value) { /* TODO check can never actually be used */ return $value; }
-    protected function makeRptFormDisplay($value) { /* TODO check can never actually be used */ return $value; }
-    protected function makeInstanceDisplay($value) { /* TODO check can never actually be used */ return $value; }
+    protected function makeEventDisplay($value) { return $value; }
+    protected function makeRptFormDisplay($value) { return $value; }
+    protected function makeInstanceDisplay($value) { return $value; }
 
     protected function makeDAGDisplay($value, $outputFormat) { 
         if (trim($value)=='') return '';
@@ -1224,11 +1224,11 @@ class Report
             $outValue = array();
             switch ($format){
                 case 'html': 
-                    $val0 = 'Unchecked (0)'; // TODO translation? // TODO value only vs label only
+                    $val0 = 'Unchecked (0)'; // TODO translation?
                     $val1 = 'Checked (1)';
                     break;
                 case 'csvlabels':
-                    $val0 = 'Unchecked'; // TODO translation? // TODO value only vs label only
+                    $val0 = 'Unchecked'; // TODO translation?
                     $val1 = 'Checked';
                     break;
                 case 'csv':

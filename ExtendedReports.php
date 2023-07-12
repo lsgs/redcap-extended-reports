@@ -39,10 +39,10 @@ class ExtendedReports extends AbstractExternalModule
             $this->apiReportExport();
             // $this->exitAfterHook(); when successfull
             return;
-        }
-
-        global $user_rights;
+        } 
         
+        if (!str_starts_with(PAGE, 'DataExport/')) return; // only DataExport/report page functionality follows
+
         $report = new Report($project_id, intval($this->report_id), $this);
 
         if (PAGE=='DataExport/report_edit_ajax.php' && count($_POST)) {
@@ -72,6 +72,7 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (isset($_POST['report_id']) && (PAGE == 'DataExport/report_copy_ajax.php' || PAGE == 'DataExport/report_delete_ajax.php')) {
             // copying or deleting a report
+            global $user_rights;
             $deReport = \DataExport::getReports($this->report_id);
             if (empty($deReport)) return;
 
