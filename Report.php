@@ -273,12 +273,12 @@ class Report
 			// Report title
 			\RCView::div(array('id'=>'this_report_title', 'style'=>'margin:10px 0 '.($report['description'] == '' ? '8' : '0').'px;padding:5px 3px;color:#800000;font-size:18px;font-weight:bold;'),
 				// Title
-				$report['title']
+				\REDCap::filterHtml($report['title'])
 			) .
 			// Report description (if has one)
 			($report['description'] == '' ? '' : 
 				\RCView::div(array('id'=>'this_report_description', 'style'=>'max-width:1100px;padding:5px 3px;line-height:15px;'),
-					\Piping::replaceVariablesInLabel(filter_tags($report['description']))
+					\Piping::replaceVariablesInLabel(\REDCap::filterHtml($report['description']))
 				) .
 				// Output the JavaScript to display all Smart Charts on the page
 				\Piping::outputSmartChartsJS()

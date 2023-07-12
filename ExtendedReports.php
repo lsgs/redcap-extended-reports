@@ -41,10 +41,6 @@ class ExtendedReports extends AbstractExternalModule
             return;
         } 
         
-        if (!str_starts_with(PAGE, 'DataExport/')) return; // only DataExport/report page functionality follows
-
-        $report = new Report($project_id, intval($this->report_id), $this);
-
         if (PAGE=='DataExport/report_edit_ajax.php' && count($_POST)) {
             // saving a new report -> save custom settings using incremented max redcap_reports.report_id ($_GET['report_id']==0)
             // saving existing report -> save custom settings using report_id = $_GET['report_id']
@@ -56,6 +52,7 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (PAGE == 'DataExport/report_ajax.php' || (\DataExport::isPublicReport() && isset($_POST['report_id']))) {
             // viewing a report - get the html to display
+            $report = new Report($project_id, intval($this->report_id), $this);
             if ($report->is_extended) {
                 $report->viewReport();
                 $this->exitAfterHook();
@@ -63,6 +60,7 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (PAGE == 'DataExport/data_export_ajax.php') {
             // exporting a report - get the export files (only csvraw and csvlabel export option gets any manipulation)
+            $report = new Report($project_id, intval($this->report_id), $this);
             if ($report->is_extended && (\htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvraw' || \htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvlabels')) {
                 if(!isset($_GET['extended_report_hook_bypass'])) {
                     $report->exportReport();
