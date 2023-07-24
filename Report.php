@@ -25,6 +25,7 @@ class Report
     protected $module;
     protected $report_attr = array(); // will be array of values read from the report's record in redcap_reports
     protected $dag_names = array();
+    protected $record_labels = array();
     public $is_extended = false;
     public $is_sql = false;
     public $sql_disable_dag_filter = false;
@@ -759,7 +760,8 @@ class Report
                 $dagHeader = array(
                     'report_id' => $this->report_id,
                     'event_id' => $Proj->firstEventId,
-                    'field_name' => 'redcap_data_access_group'
+                    'field_name' => 'redcap_data_access_group',
+                    'subvalues' => array()
                 );
                 array_splice($headers, $dagPos, 0, array($dagHeader));
                 $this->dag_names = array();
@@ -870,7 +872,8 @@ class Report
 
             $rows[] = $thisRow;
         }
-
+        $crl = \Records::getCustomRecordLabelsSecondaryFieldAllRecords(array_keys($report_data));
+        $this->record_labels = (is_array($crl)) ? $crl : array();
         return array($rows, $headers, $hasSplitCbOrInstances);
     }
 
@@ -1133,9 +1136,9 @@ class Report
         global $Proj;
         $recordDisplay = $record;
         if ($outputFormat=='html') {
-            $crl = \Records::getCustomRecordLabelsSecondaryFieldAllRecords($record, false, 'all');
+            $crl = (array_key_exists($record, $this->record_labels)) ? $this->record_labels[$record] : ''; // $crl = \Records::getCustomRecordLabelsSecondaryFieldAllRecords($record, false, 'all');
             $recordDisplay = "<a class='mr-1' target='_blank' href='".APP_PATH_WEBROOT."DataEntry/record_home.php?pid=$Proj->project_id&id=$record'>$record</a>";
-            $recordDisplay .= (is_array($crl)) ? $crl[$record] : $crl;
+            $recordDisplay = trim("$recordDisplay $crl");
         } 
         return $recordDisplay;
     }
