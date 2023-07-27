@@ -776,6 +776,7 @@ class Report
         // make the reshaped rows
         $rows = array();
         foreach (array_keys($report_data) as $returnRecord) {
+            if (is_null($returnRecord) || $returnRecord=='') continue;
             $thisRow = array();
 
             foreach ($headers as $thisHeader) {
@@ -851,7 +852,9 @@ class Report
                         $thisRow[] = ($this->reshape_instance==='cols') ? $thisRecValue : rtrim($thisRecValue,$sep);
                     }
                 } else {
-                    if (
+                    if ($thisHeader['field_name'] == $Proj->table_pk) {
+                        $thisRow[] = $returnRecord;
+                    } else if (
                         array_key_exists($thisHeader['event_id'], $report_data[$returnRecord]) && 
                         array_key_exists($thisHeader['field_name'], $report_data[$returnRecord][$thisHeader['event_id']])
                        ) {
