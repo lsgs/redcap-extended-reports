@@ -1320,7 +1320,7 @@ class Report
     }
 
     protected function makeOntologyDisplay($val, $service, $category) {
-        $sql = "select label from \REDCap.redcap_web_service_cache where project_id=? and service=? and category=? and `value`=?";
+        $sql = "select label from redcap_web_service_cache where project_id=? and service=? and category=? and `value`=?";
         $q = $this->module->query($sql, [PROJECT_ID, $service, $category, $val]);
         $r = db_fetch_assoc($q);
         $cachedLabel = $r["label"];
