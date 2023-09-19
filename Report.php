@@ -1127,7 +1127,7 @@ class Report
                 // If value contains line breaks (and no " or ,) then wrap with "
                 $returnValue = static::DEFAULT_ESCAPE_CHAR.$value.static::DEFAULT_ESCAPE_CHAR;
             } else if(is_numeric($value) && is_float(0+$value)) {
-                $returnValue = str_replace('.',$decimalCharacter,"$value",1);
+                $returnValue = str_replace('.',$decimalCharacter,"$value");
             } else {
                 $returnValue = $value;
             }
