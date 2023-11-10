@@ -459,7 +459,7 @@ class Report
         }
         if ($data_edoc_id === false) $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
 
-
+        header('Content-Type: application/json');
         print \json_encode_rc(array('title'=>$dialog_title, 'content'=>$dialog_content));
     }
     
