@@ -416,7 +416,7 @@ class Report
 
         if (isset($info['http_code']) && ($info['http_code'] == 404 || $info['http_code'] == 407 || $info['http_code'] >= 500)) $response = "{title:'{$lang['global_01']}',content:'$response'}";
 
-        $dialog = \json_decode($response, true);
+        $dialog = \json_decode($response, true)?:[];
         $dialog_title = (array_key_exists('title',$dialog)) ? $dialog['title'] : $lang['global_01'];
         $dialog_content = (array_key_exists('content',$dialog)) ? $dialog['content'] : $response;
 
