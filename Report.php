@@ -459,7 +459,7 @@ class Report
         }
         if ($data_edoc_id === false) $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
 
-
+        header('Content-Type: application/json');
         print \json_encode_rc(array('title'=>$dialog_title, 'content'=>$dialog_content));
     }
     
@@ -1127,7 +1127,7 @@ class Report
                 // If value contains line breaks (and no " or ,) then wrap with "
                 $returnValue = static::DEFAULT_ESCAPE_CHAR.$value.static::DEFAULT_ESCAPE_CHAR;
             } else if(is_numeric($value) && is_float(0+$value)) {
-                $returnValue = str_replace('.',$decimalCharacter,"$value",1);
+                $returnValue = str_replace('.',$decimalCharacter,"$value");
             } else {
                 $returnValue = $value;
             }
