@@ -9,11 +9,7 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 9,
-    "permissions": [
-        "redcap_every_page_before_render",
-        "redcap_every_page_top"
-    ],
+    "framework-version": 14,
     "enable-every-page-hooks-on-system-pages": true,
     "system-settings": [
     ],

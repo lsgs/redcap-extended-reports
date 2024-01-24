@@ -340,9 +340,9 @@ class ExtendedReports extends AbstractExternalModule
                             let reshapeEventOpt = $('select[name=rpt-reshape-event]').val();
                             let reshapeInstanceOpt = $('select[name=rpt-reshape-instance]').val();
                             if (reshapeEventOpt=='' && reshapeInstanceOpt!=='') {
-                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instanecs.<br>Event option not selected.');
+                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instances.<br>Event option not selected.');
                             } else if (reshapeEventOpt!=='' && reshapeInstanceOpt=='') {
-                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instanecs.<br>Instance option not selected.');
+                                simpleDialog('For row-per-record reshaping an option must be selected for both events and instances.<br>Instance option not selected.');
                             } else {
                                 saveReport(<?=$report->report_id?>);
                             }

@@ -26,8 +26,8 @@ Options for handling repeating data - repeating events or repeating instruments 
 * Column per instance (default): the maximum number of instances will be determined and data from each instance will be returned in its own set of columns.
 * First instance: one column per field containing only the value from the lowest numbered instance from each record.
 * Last instance: one column per field containing only the value from the highest numbered instance from each record. 
-* Lowest value: one column per field containing only the lowest value across all instances from each record.
-* Highest value: one column per field containing only the highest value across all instances from each record. 
+* Lowest value: one column per field containing only the lowest value across all instances from each record. (Non-functional for checkbox fields.)
+* Highest value: one column per field containing only the highest value across all instances from each record. (Non-functional for checkbox fields.)
 * Concatenate (space/comma/pipe): one column per field containing all values from each record concatenated into a single string value using the selected character.
 
 With the "Column per instance" option, field names will incorporate event and instance number information in a dot- or space-separated form as follows:
@@ -37,6 +37,8 @@ With the "Column per instance" option, field names will incorporate event and in
 * Labels CSV, repeating instrument: EventLabel\[ ArmLabel\] FieldLabel #Instance
 (Arm label included only if project has multiple arms)
 
+The "Concatenate (space/comma/pipe)" causes a report to be handled as if "Combine checkbox options into single column" is selected irrespective of its actual setting. (There is no obvious way to show the data otherwise.)
+
 ### Live Filters
 Live filters are **not supported** (mainly because they're not supported by the `REDCap::getReport()` developer method).
 
@@ -44,7 +46,7 @@ Live filters are **not supported** (mainly because they're not supported by the 
 Row-per-record reshaping is **not** applied to stats package (SAS, SPSS, R, Stata) or ODM exports.
 
 ### "Longitudinal Reports" Plugin
-The functionality of this external module differs in some respects from the old (pre-external module framework) "[https://github.com/lsgs/redcap-longitudinal-reports/](Longitudinal Reports)" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reproting with SQL reports. The external module renders the plugin obsolete.
+The functionality of this external module differs in some respects from the old (pre-external module framework) "[https://github.com/lsgs/redcap-longitudinal-reports/](Longitudinal Reports)" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reporting with SQL reports. The external module renders the plugin obsolete.
 
 ********************************************************************************
 ## SQL Reports 

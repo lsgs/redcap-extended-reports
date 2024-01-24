@@ -246,7 +246,7 @@ class Report
 									'<i class="fas fa-file-download"></i> ' .$lang['report_builder_48']
 								)
 							) .
-              // Download Report Files
+                            // Download Report Files
 							(!($user_rights['data_export_tool'] != '0' && $downloadFilesBtnEnabled) ? '' :
 								\RCView::button(array('class'=>'hidden download-files-btn report_btn jqbuttonmed fs12 text-successrc', 'onclick'=>"window.location.href = '".APP_PATH_WEBROOT."DataExport/file_export_zip.php?pid=".PROJECT_ID."&report_id={$report_id}'+getInstrumentsListFromURL()+getLiveFilterUrl();"),
                                     '<i class="fa-solid fa-circle-down"></i> ' .$lang['report_builder_220']
@@ -465,6 +465,7 @@ class Report
     
     public function doExtendedReport($format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
         global $Proj;
+        $Proj->loadEventsForms(); // ensure full initialisation in db
         $csvDelimiter = (empty($csvDelimiter)) ? \UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
         $csvDelimiter = (empty($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
         $decimalCharacter = (empty($decimalCharacter)) ? \UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
@@ -477,8 +478,12 @@ class Report
         $rows = array();
         if ($this->is_sql) {
             list($rows, $headers, $hasSplitCbOrInstances) = $this->doSqlReport();
-            $this->report_attr['combine_checkbox_values'] = true;
+            $this->report_attr['combine_checkbox_values'] = 1;
         } else {
+            // when concatenating or selecting specific instances then force combine checkboxes (no obvious way to show otherwise!)
+            if ($this->reshape_instance!=='cols') {
+                $this->report_attr['combine_checkbox_values'] = 1;
+            }
             list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport($format);
         }
 
@@ -495,14 +500,13 @@ class Report
             if ($num_results_returned === 0) {
                 $report_table='<table id="report_table" class="dataTable cell-border" style="table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;"><thead><tr></tr></thead><tbody><tr class="odd"><td style="color:#777;border:1px solid #ccc;padding:10px 15px !important;" colspan="0">No results were returned</td></tr></tbody></table>';
             } else {
-                //"<table id='report_table' class='dataTable cell-border' style='table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;'><thead><tr><th>Study ID<div class="rpthdr">record_<wbr>id</div></th><th>Event Name<div class="rpthdr">redcap_<wbr>event_<wbr>name</div></th><th>Repeat Instrument<div class="rpthdr">redcap_<wbr>repeat_<wbr>instrument</div></th><th>Repeat Instance<div class="rpthdr">redcap_<wbr>repeat_<wbr>instance</div></th></tr></thead><tr class="odd"><td><a href="/redcap_v10.7.1/DataEntry/record_home.php?pid=244&amp;id=1&amp;arm=1" class="rl">1</a>&nbsp; <span class="crl">Alice Adams</span></td><td>Person</td><td class='nodesig'></td><td class='nodesig'></td></tr><tr class="even"><td><a href="/redcap_v10.7.1/DataEntry/index.php?pid=244&amp;id=1&amp;page=event&amp;event_id=1494&amp;instance=1" class="rl">1</a>&nbsp; <span class="crl">Alice Adams</span></td><td>Event</td><td></td><td>1</td></tr><tr class="odd"><td><a href="/redcap_v10.7.1/DataEntry/record_home.php?pid=244&amp;id=2&amp;arm=1" class="rl""
-                $rowspan = ($hasSplitCbOrInstances && $this->report_attr['report_display_header']!=='VARIABLE') ? 2 : 1;
+                $numThRows = ($hasSplitCbOrInstances && $this->report_attr['report_display_header']!=='VARIABLE') ? 2 : 1;
                 $report_table = "<table id='report_table' class='dataTable cell-border' style='table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;'>";
                 $table_header = "<thead>";
-                for ($headerRow=1; $headerRow<=$rowspan; $headerRow++) {
+                for ($headerRow=1; $headerRow<=$numThRows; $headerRow++) {
                     $table_header .= "<tr>";
                     foreach($headers as $th) {
-                        $table_header .= $this->makeTH($th, $headerRow);
+                        $table_header .= $this->makeTH($th, $headerRow, $numThRows);
                     }
                     $table_header .= "</tr>";
                 }
@@ -530,7 +534,7 @@ class Report
                     }
                     $table_body .= "</tr>";
                 }
-                $table_body .= "</tr></body>";
+                $table_body .= "</body>";
             }
             $return_content = $report_table.$table_header.$table_body.'</table>';
 
@@ -607,10 +611,10 @@ class Report
     }
 
     protected function doSqlReport() {
-        global $lang,$Proj,$user_rights,$project_id;
+        global $Proj,$user_rights;
         
         $sql = rtrim(trim($this->sql_query), ";");
-        $sql = \Piping::pipeSpecialTags($sql, $project_id); // user and misc tags will work
+        $sql = \Piping::pipeSpecialTags($sql, $this->project_id); // user and misc tags will work
         if (!preg_match("/^select\s/i", $sql)) {
             return array('Not a select query', 0);
 		}
@@ -666,9 +670,9 @@ class Report
     }
 
     protected function doReshapedReport($format) {
-        global $lang, $Proj;
+        global $lang, $Proj, $user_rights;
 
-        $report_data = \REDCap::getReport($this->report_id, 'array', false, false); // note export as labels option does not work for 'array'
+        $report_data = self::getReport($this->report_id); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
         $headers = array();
@@ -690,16 +694,16 @@ class Report
         if ($num_filter_events > 0) {
             $sql .= 'inner join redcap_reports_filter_events rfe on r.report_id=rfe.report_id and em.event_id=rfe.event_id ';
         }
-        
+        $sql .= 'where r.report_id=? and rf.limiter_group_operator is null ';
         if ($this->reshape_event=='ef') {
             // order columns by arm then event then field
-            $sql .= 'where r.report_id=? order by ea.arm_num, em.day_offset, em.event_id, rf.field_order';
+            $sql .= 'order by ea.arm_num, em.day_offset, em.event_id, rf.field_order';
         } else if ($this->reshape_event=='fe') {
             // order columns by field then arm then event
-            $sql .= 'where r.report_id=? order by rf.field_order, ea.arm_num, em.day_offset, em.event_id';
+            $sql .= 'order by rf.field_order, ea.arm_num, em.day_offset, em.event_id';
         } else {
             // no events - repeating instances only
-            $sql .= 'where r.report_id=? order by rf.field_order';
+            $sql .= 'order by rf.field_order';
         }
         
         $columnsResult = $this->module->query($sql, [$this->report_id]);
@@ -809,18 +813,26 @@ class Report
                                         $thisRecValue[] = $thisInstanceValue; // separate col for each instance
                                         break;
                                     case 'min':
-                                        if (is_numeric($thisInstanceValue)) {
-                                            $thisInstanceValue = (float)$thisInstanceValue;
-                                            $thisRecValue = (float)$thisRecValue;
+                                        if ($thisHeader['element_type']=='checkbox') {
+                                            $thisRecValue = ''; // checkbox field instances have no min
+                                        } else {
+                                            if (is_numeric($thisInstanceValue)) {
+                                                $thisInstanceValue = (float)$thisInstanceValue;
+                                                $thisRecValue = (float)$thisRecValue;
+                                            }
+                                            $thisRecValue = ($thisRecValue=='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
-                                        $thisRecValue = ($thisRecValue=='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         break;
                                     case 'max':
-                                        if (is_numeric($thisInstanceValue)) {
-                                            $thisInstanceValue = (float)$thisInstanceValue;
-                                            $thisRecValue = (float)$thisRecValue;
+                                        if ($thisHeader['element_type']=='checkbox') {
+                                            $thisRecValue = ''; // checkbox field instances have no max
+                                        } else {
+                                            if (is_numeric($thisInstanceValue)) {
+                                                $thisInstanceValue = (float)$thisInstanceValue;
+                                                $thisRecValue = (float)$thisRecValue;
+                                            }
+                                            $thisRecValue = ($thisRecValue=='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
-                                        $thisRecValue = ($thisRecValue=='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         break;
                                     case 'conc_space':
                                     case 'conc_comma':
@@ -880,13 +892,13 @@ class Report
         return array($rows, $headers, $hasSplitCbOrInstances);
     }
 
-    protected function makeTH($th, $thRow) {
+    protected function makeTH($th, $thRow, $numThRows) {
         if ($thRow>1 && count($th['subvalues'])===0 && $th['instance_count']===0) return '';
         global $Proj;
         $headerCell = '';
 
         if ($thRow===1) {
-            $headerCell = $this->makeReportColTitle($th);
+            $headerCell = $this->makeReportColTitle($th, $numThRows);
         } else {
             if ($th['instance_count'] > 0) {
                 for ($i=1; $i <= $th['instance_count']; $i++) {
@@ -906,8 +918,8 @@ class Report
         return $headerCell;
     }
 
-    protected function makeReportColTitle($th, $raw=false) {
-        global $Proj;
+    protected function makeReportColTitle($th, $numThRows, $raw=false) {
+        global $Proj, $user_rights;
         $fldName = \REDCap::filterHtml((is_array($th))?$th['field_name']:(string)$th);
 
         if ($raw) {
@@ -949,9 +961,14 @@ class Report
             } else {
                 $colspan = (count($th['subvalues']) > 0) ? " colspan=".count($th['subvalues']) : '';
             }
-            $rowspan = (count($th['subvalues']) > 0 || $th['instance_count'] > 0) ? "" : " rowspan=2";
+            $rowspan = ($numThRows > 1 && count($th['subvalues']) == 0 && $th['instance_count'] == 0) ? " rowspan=2" : "";
+            
+            // If user does not have form-level access to this field's form
+            if ($fldName != $Proj->table_pk && $user_rights['forms'][$Proj->metadata[$fldName]['form_name']] == '0') {
+                $noAccess = 'class="form_noaccess"';
+            }
         }
-        return "<th $colspan $rowspan><div class=\"mr-3\">$title</div></th>";;
+        return "<th $colspan $rowspan $noAccess><div class=\"mr-3\">$title</div></th>";;
     }
 
     protected function makeExportColTitles($th, $format) {
@@ -1023,7 +1040,7 @@ class Report
         foreach ($th['subvalues'] as $thsv) {
             $title = $this->truncateLabel($choices[$thsv]);
             if ($this->report_attr['report_display_header']!=='LABEL') $title .= "<div class=\"rpthdr\">".$th['field_name']."___$thsv</div>";
-            $headers .= $this->makeReportColTitle("$inst $title", true);
+            $headers .= $this->makeReportColTitle("$inst $title", 2, true);
         }
         return $headers;
     }
@@ -1038,11 +1055,11 @@ class Report
      * @return Array $return Array of values: single value except for non-combined checkboxes
      */
     protected function makeOutputValue($value, $fieldName, $outputFormat, $decimalCharacter=null, $delimiter=null) {
-        global $Proj;
+        global $Proj, $user_rights;
         $decimalCharacter = $decimalCharacter ?? static::DEFAULT_DECIMAL_CHAR;
         $delimiter = $delimiter ?? static::DEFAULT_CSV_DELIMITER;
         $field = $Proj->metadata[$fieldName];
-
+        
         if ($fieldName==$Proj->table_pk) {
             $outValue = $this->makePkDisplay($value, $outputFormat);
         } else if ($fieldName=='redcap_event_name') { // no reshaping of events
@@ -1053,6 +1070,8 @@ class Report
             $outValue = $this->makeInstanceDisplay($value);
         } else if ($fieldName=='redcap_data_access_group') { 
             $outValue = $this->makeDAGDisplay($value, $outputFormat, $decimalCharacter, $delimiter);
+        } else if ($user_rights['forms'][$Proj->metadata[$fieldName]['form_name']] == '0') {
+            $outValue = (is_array($value)) ? array_fill_keys(array_keys($value), "-") : "-"; // User has no rights to this field
         } else if (in_array($field['element_type'], array("advcheckbox", "radio", "select", "checkbox", "dropdown", "sql", "yesno", "truefalse"))) {
             $outValue = $this->makeChoiceDisplay($value, $fieldName, $outputFormat, $decimalCharacter, $delimiter);
         } else if ($field['element_type']==='notes') {
@@ -1182,40 +1201,36 @@ class Report
                 $this->report_attr['combine_checkbox_values']
             ) {
             if (!is_null($val) && !is_array($val)) {
-                $selected=explode(',', $val);
+                /*$selected=explode(',', $val);
                 $val = array();
                 foreach ($selected as $s) {
                     $val[$s] = '1';
-                }
+                }*/ return $val;
             }
+            $selVals = array();
+            $selLbls = array();
             foreach ($val as $valkey => $cbval) {
-                if ($cbval==='1') {
-                    switch ($format){
-                        case 'html': 
-                            $val[$valkey] = $this->makeChoiceDisplayHtml($valkey, $choices);
-                            break;
-                        case 'csv':
-                        case 'csvraw':
-                            $val[$valkey] = $valkey;
-                            break;
-                        case 'csvlabels':
-                            $val[$valkey] = $choices[$valkey];
-                            break;
-                        default:
-                            break;
-                    }
-                } else {
-                    unset($val[$valkey]); // don't keep non-selected options
+                if ($cbval==='1') { // capture selected choices
+                    $selVals[] = $valkey;
+                    $selLbls[] = $this->module->escape($choices[$valkey]);
                 }
             }
+            $valstr = implode(', ',$selVals);
+            $lblstr = implode(', ',$selLbls);
             switch ($format){
-                case 'html': 
-                    $outValue = implode('<br>', $val); // return single value: multiple checkbox selections one per line when combined
+                case 'html': // return single value: labels and values of selected checkboxes "Choice 1, Choice 3 (1,3)"
+                    switch ($this->report_attr['report_display_data']) {
+                        case 'LABEL': $outValue = $lblstr; break;
+                        case 'RAW': $outValue = $valstr; break;
+                        default: $outValue = $lblstr.' <span class="text-muted">('.$valstr.')</span>'; // BOTH
+                    }
                     break;
                 case 'csv':
                 case 'csvraw':
+                    $outValue = $valstr; // return single value: comma-separated values of selected choices
+                    break;
                 case 'csvlabels':
-                    $outValue = implode($delimiter, $val); // return single value: multiple checkbox selections comma-separated
+                    $outValue = $lblstr; // return single value: comma-separated labels of selected choices
                     break;
                 default:
                     break;
@@ -1271,6 +1286,7 @@ class Report
     }
 
     protected function makeChoiceDisplayHtml($val, $choices) {
+        if ($val == '') return '';
         if (array_key_exists($val, $choices)) {
             $rtn = '';
             switch ($this->report_attr['report_display_data']) {
@@ -1333,5 +1349,142 @@ class Report
     protected function truncateLabel($label, $maxlen=50) {
         $maxlen = ($maxlen<21) ? 21 : $maxlen;
         return (\strlen($label) > $maxlen) ? \substr($label, 0, $maxlen-20).'...'.\substr($label, -17, 17) : $label;
+    }
+
+    /**
+	 * SUMMARY: Get a report in json, xml, csv, or array format. 
+     * 
+     * Extended Reports: Modified version of REDCap::getReport() that supports superuser access to report data and applies default sort to reshaped reports.
+     * 
+	 * DESCRIPTION: mixed <b>REDCap::getReport</b> ( int <b>$report_id</b> [, string <b>$outputFormat</b> = 'array' [, bool <b>$exportAsLabels</b> = FALSE [, bool <b>$exportCsvHeadersAsLabels</b> = FALSE ]]] )
+	 * DESCRIPTION_TEXT: Given a report id and output format, this method returns a report that has been defined in a project. The default format is Array, but JSON, CSV, and XML are also available.
+	 * PARAM: report_id - The id of the report to retrieve. The report_id is found for a given report in the far-right column of a project's "My Reports & Exports" page.
+	 * PARAM: outputFormat - The output format of the report's data. Valid options: 'array', 'csv', 'json', and 'xml'. By default, 'array' is used.
+	 * PARAM: exportAsLabels - Sets the format of the data returned. If FALSE, it returns the raw data. If TRUE, it returns the data as labels (e.g., "Male" instead of "0"). By default, FALSE is used. This parameter is ignored if return_format = "array" since "array" only returns raw values.
+	 * PARAM: exportCsvHeadersAsLabels - Sets the format of the CSV headers returned (only applicable to 'csv' return formats). If FALSE, it returns the variable names as the headers. If TRUE, it returns the fields' Field Label text as the headers. By default, FALSE is used.
+	 * RETURN: A report in the requested output format.
+	 * VERSION: 8.4.1
+	 * EXAMPLE: Simple example to retrieve a report in JSON format.
+<pre>
+$report = REDCap::getReport('42', 'json');
+</pre>
+	 * EXAMPLE: Simple example to retrieve a report in CSV format with labels in the data.
+<pre>
+$report = REDCap::getReport('896', 'csv', true);
+</pre>
+	 */
+	public static function getReport($report_id, $outputFormat='array', $exportAsLabels=false, $exportCsvHeadersAsLabels=false)
+	{
+		$report_id = (int)$report_id;
+		if (!is_numeric($report_id) || $report_id < 1) return false;
+		// Get project_id from report_id
+		$project_id = \DataExport::getProjectIdFromReportId($report_id);
+		$Proj = new \Project($project_id);
+		// Get user rights
+		global $user_rights;
+/*		$user_rights = array(); LS this section removed because  it breaks super user access to reshaped reports
+		if (defined("USERID")) 
+		{
+			// Get user rights
+			$user_rights_proj_user = UserRights::getPrivileges($project_id, USERID);
+			$user_rights = $user_rights_proj_user[$project_id][strtolower(USERID)];
+			$ur = new \UserRights();
+			$user_rights = $ur->setFormLevelPrivileges($user_rights);
+			unset($user_rights_proj_user);
+		}*/
+
+		// De-Identification settings
+		$hashRecordID = (isset($user_rights['forms_export'][$Proj->firstForm]) && $user_rights['forms_export'][$Proj->firstForm] > 1 && $Proj->table_pk_phi);
+		$removeIdentifierFields = null;
+		$removeUnvalidatedTextFields = null;
+		$removeNotesFields = null;
+		$removeDateFields = null;
+
+		$outputType = 'export';
+		$outputCheckboxLabel = false;
+		$outputDags = false;
+		$outputSurveyFields = false;
+		$dateShiftDates = false;
+		$dateShiftSurveyTimestamps = false;
+		$selectedInstruments = array();
+		$selectedEvents = array();
+		$returnIncludeRecordEventArray = false;
+		$outputCheckboxLabel = false;
+		$includeOdmMetadata = false;
+		$storeInFileRepository = false;
+		$replaceFileUploadDocId = true;
+		$liveFilterLogic = '';
+		$liveFilterGroupId = '';
+		$liveFilterEventId = '';
+		$isDeveloper = true;
+
+		$reportData = \DataExport::doReport(
+			$report_id,
+			$outputType,
+			$outputFormat,
+			$exportAsLabels,
+			$exportCsvHeadersAsLabels,
+			$outputDags,
+			$outputSurveyFields,
+			$removeIdentifierFields,
+			$hashRecordID,
+			$removeUnvalidatedTextFields,
+			$removeNotesFields,
+			$removeDateFields,
+			$dateShiftDates,
+			$dateShiftSurveyTimestamps,
+			$selectedInstruments,
+			$selectedEvents,
+			$returnIncludeRecordEventArray,
+			$outputCheckboxLabel,
+			$includeOdmMetadata,
+			$storeInFileRepository,
+			$replaceFileUploadDocId,
+			$liveFilterLogic,
+			$liveFilterGroupId,
+			$liveFilterEventId,
+			$isDeveloper, ",", '', array(),
+			false, true, false, false,
+			false, true, true
+		);
+
+        return self::applyDefaultSorting($reportData);
+	}
+
+    protected static function applyDefaultSorting(&$reportData) {
+        return $reportData; // TODO
+        // APPLY MULTI-FIELD SORTING
+/*        if (($doSorting ?? false) && isset($sortFieldValues[0]) && is_array($sortFieldValues[0]))
+        {
+            // Sort the data array
+            if (count($sortFieldValues) == 1) {
+                // One sort field
+                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
+                                $record_data_formatted);
+            } elseif (count($sortFieldValues) == 2) {
+                // Two sort fields
+                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
+                                $sortFieldValues[1], ($sortTypes[1] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[1] ? SORT_NUMERIC : SORT_STRING),
+                                $record_data_formatted);
+            } else {
+                // Three sort fields
+                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
+                                $sortFieldValues[1], ($sortTypes[1] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[1] ? SORT_NUMERIC : SORT_STRING),
+                                $sortFieldValues[2], ($sortTypes[2] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[2] ? SORT_NUMERIC : SORT_STRING),
+                                $record_data_formatted);
+            }
+            // If any sorting fields did NOT exist in $fields originally (but were added so their data could be obtained for
+            // sorting purposes only), then remove them now.
+            if (!empty($sortArrayRemoveFromData)) {
+                foreach ($sortArrayRemoveFromData as $this_field) {
+                    foreach ($record_data_formatted as &$this_item) {
+                        // Remove field from this record-event
+                        unset($this_item[$this_field]);
+                    }
+                }
+            }
+            // Remove vars to save memory
+            unset($sortFieldValues);
+        }*/
     }
 }
