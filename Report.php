@@ -820,7 +820,7 @@ class Report
                                                 $thisInstanceValue = (float)$thisInstanceValue;
                                                 $thisRecValue = (float)$thisRecValue;
                                             }
-                                            $thisRecValue = ($thisRecValue=='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
                                         break;
                                     case 'max':
@@ -831,7 +831,7 @@ class Report
                                                 $thisInstanceValue = (float)$thisInstanceValue;
                                                 $thisRecValue = (float)$thisRecValue;
                                             }
-                                            $thisRecValue = ($thisRecValue=='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
                                         break;
                                     case 'conc_space':
