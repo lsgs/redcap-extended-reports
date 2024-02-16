@@ -650,7 +650,8 @@ class Report
             if ($includesPk && $user_rights['group_id'] && !$this->sql_disable_dag_filter) {
                 // if sql query includes pk field then filter by user's DAG
                 $recordFilter = array();
-                $result1 = $this->module->query("select distinct record from redcap_data where project_id=? and field_name='__GROUPID__' and `value`=?",[$Proj->project_id,$user_rights['group_id']]);
+                $redcap_data = method_exists('\REDCap', 'getDataTable') ? \REDCap::getDataTable($Proj->project_id) : "redcap_data";
+                $result1 = $this->module->query("select distinct record from $redcap_data where project_id=? and field_name='__GROUPID__' and `value`=?",[$Proj->project_id,$user_rights['group_id']]);
                 while($row = $result1->fetch_assoc()){
                     $recordFilter[] = $row['record'];
                 }
@@ -708,6 +709,7 @@ class Report
         
         $columnsResult = $this->module->query($sql, [$this->report_id]);
         $hasSplitCbOrInstances = false;
+        $viewOnlyVars = array();
 
         while($thisHdr = $columnsResult->fetch_assoc()){
             $thisHdr['unique_name'] = $eventUniqueNames[$thisHdr['event_id']];
@@ -752,7 +754,17 @@ class Report
                 $thisHdr['instance_count'] = $fieldMaxInstance;
             }
 
-            $headers[] = $thisHdr;
+            $thisHdr['view_rights'] = $user_rights['forms'][$thisHdr['form_name']];
+            $thisHdr['export_rights'] = $user_rights['forms_export'][$thisHdr['form_name']];
+            if ($format=='html' && $thisHdr['export_rights']==0 && $thisHdr['view_rights']>0) {
+                // fields on forms with view-only permissions (no export) will not be present in the output of doReport() 
+                // record here and do separate data read below
+                $viewOnlyVars[$thisHdr['field_name']] = 0; 
+            }
+
+            if ($format=='html' || $thisHdr['export_rights']>0) {
+                $headers[] = $thisHdr; // only keep header for export when user has some export permission for field's form
+            }
         }
 
         // include dag header if selected for report
@@ -773,6 +785,55 @@ class Report
                 $dagIdToLbl = \REDCap::getGroupNames(false);
                 foreach ($dagIdToUN as $id => $un) {
                     $this->dag_names[$un] = $dagIdToLbl[$id];
+                }
+            }
+        }
+
+        if (count($viewOnlyVars) > 0) {
+            // read data for view only vars and merge into array from doReport()
+            $viewOnlyData = \REDCap::getData([
+                'return_format' => 'array',
+                'records' => array_keys($report_data),
+                'fields' => array_keys($viewOnlyVars)
+            ]);
+
+            foreach ($report_data as $rptRecord => $rptRecL1) {
+                if (!array_key_exists($rptRecord, $viewOnlyData)) continue;
+                if (array_key_exists('repeat_instances', $viewOnlyData[$rptRecord]) && !array_key_exists('repeat_instances', $rptRecL1)) $rptRecL1['repeat_instances'] = $viewOnlyData[$rptRecord]['repeat_instances'];
+                foreach ($rptRecL1 as $l1Key => $l1Val) {
+                    if ($l1Key=='repeat_instances') {
+                        foreach ($l1Val as $rptEvt => $rptFrm) {
+                            if (!array_key_exists($rptRecord, $viewOnlyData)) continue;
+                            if (!array_key_exists('repeat_instances', $viewOnlyData[$rptRecord])) continue;
+                            if (!array_key_exists($rptEvt, $viewOnlyData[$rptRecord]['repeat_instances'])) continue;
+                            foreach ($rptFrm as $frm => $inst) {
+                                if (!array_key_exists($frm, $viewOnlyData[$rptRecord]['repeat_instances'][$rptEvt])) continue;
+                                foreach ($inst as $n => $instflds) {
+                                    if (!array_key_exists($n, $viewOnlyData[$rptRecord]['repeat_instances'][$rptEvt][$frm])) continue;
+                                    foreach ($viewOnlyVars as $viewOnlyVar => $maxInstances) {
+                                        if ($n>$maxInstances) $viewOnlyVars[$viewOnlyVar] = $n;
+                                        if (!array_key_exists($viewOnlyVar, $viewOnlyData[$rptRecord]['repeat_instances'][$rptEvt][$frm][$n])) continue;
+                                        $report_data[$rptRecord]['repeat_instances'][$rptEvt][$frm][$n][$viewOnlyVar] = $viewOnlyData[$rptRecord]['repeat_instances'][$rptEvt][$frm][$n][$viewOnlyVar];
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // l1Key is an event id
+                        if (!array_key_exists($rptRecord, $viewOnlyData)) continue;
+                        if (!array_key_exists($l1Key, $viewOnlyData[$rptRecord])) continue;
+                        foreach (array_keys($viewOnlyVars) as $viewOnlyVar) {
+                            if (!array_key_exists($viewOnlyVar, $viewOnlyData[$rptRecord][$l1Key])) continue;
+                            $report_data[$rptRecord][$l1Key][$viewOnlyVar] = $viewOnlyData[$rptRecord][$l1Key][$viewOnlyVar];
+                        }
+                    }
+                }
+            }
+
+            // add max instance count into $headers for repeating data
+            foreach ($headers as $h => $thisHdr) {
+                if (array_key_exists('instance_count', $thisHdr) && array_key_exists($thisHdr['field_name'], $viewOnlyVars)) {
+                    $headers[$h]['instance_count'] = $viewOnlyVars[$thisHdr['field_name']];
                 }
             }
         }
