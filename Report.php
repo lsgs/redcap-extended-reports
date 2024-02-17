@@ -177,6 +177,8 @@ class Report
         }
         $script_time_total = round(microtime(true) - $script_time_start, 1);
 
+        $downloadFilesBtnEnabled = ($user_rights['data_export_tool'] != '0' && \DataExport::reportHasFileUploadFields($report_id, (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : []), (isset($_GET['events']) ? explode(',', $_GET['events']) : [])));
+
         // Display report and title and other text
         print  	"<div id='report_div' style='margin:0 0 20px;'>" .
 			\RCView::div(array('style'=>''),
@@ -519,16 +521,13 @@ class Report
                     foreach ($rows[$i] as $fieldIdx => $td) {
                         if ($headers[$fieldIdx]['instance_count']>0 && $this->reshape_instance==='cols') {
                             // for split instances $td will be an array of instance values (array of arrays for checkboxes)
-                            foreach ($td as $thisInstanceTd) {
-                                $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
-                                foreach ($thisFieldValue as $thisValue) {
-                                    $table_body .= $this->makeTD($thisValue);;
-                                }
-                            }
                         } else {
-                            $thisFieldValue = $this->makeOutputValue($td, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                            $td = [$td];
+                        }
+                        foreach ($td as $thisTd) {
+                            $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
                             foreach ($thisFieldValue as $thisValue) {
-                                $table_body .= $this->makeTD($thisValue);
+                                $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);;
                             }
                         }
                     }
@@ -673,7 +672,7 @@ class Report
     protected function doReshapedReport($format) {
         global $lang, $Proj, $user_rights;
 
-        $report_data = self::getReport($this->report_id); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers
+        $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
         $headers = array();
@@ -1170,8 +1169,12 @@ class Report
         return $outValue;
     }
 
-    protected function makeTD($value) {
-        return "<td>".\REDCap::filterHtml($value)."</td>";
+    protected function makeTD($value, $header) {
+        $value = \REDCap::filterHtml($value);
+        if ($header['element_type']=='file') {
+            $value = str_replace('removed=','onclick=',$value);
+        }
+        return "<td>$value</td>";
     }
 
     /**
@@ -1385,13 +1388,15 @@ class Report
     }
 
     protected function makeFileDisplay($val, $fieldName, $format) {
-        switch ($format) {
-            case 'html':
-                //        $downloadDocUrl = APP_PATH_WEBROOT.'DataEntry/file_download.php?pid='.PROJECT_ID."&s=&record=$record&event_id=$event_id&instance=$instance&field_name=$fieldName&id=$val&doc_id_hash=".Files::docIdHash($val);
-                $fileDlBtn = $val;// TODO get record/event/instance from file id "<button class='btn btn-defaultrc btn-xs' style='font-size:8pt;' onclick=\"window.open('$downloadDocUrl','_blank');return false;\">{$this->lang['design_121']}</button>";
-                $val = str_replace('removed=','onclick=',\REDCap::filterHtml($fileDlBtn));
-                break;
-            default: break;
+        if ($format==='html' && is_numeric($val)) {
+            $redcap_data = method_exists('\REDCap', 'getDataTable') ? \REDCap::getDataTable($this->project_id) : "redcap_data";
+            $sql = "select doc_id, stored_name, doc_name, doc_size, record, event_id, instance from redcap_edocs_metadata edm inner join $redcap_data d on edm.project_id=d.project_id and edm.doc_id=d.`value` where edm.project_id=? and field_name=? and doc_id=? and delete_date is null";
+            $q = $this->module->query($sql, [$this->project_id, $fieldName, $val]);
+            $r = db_fetch_assoc($q);
+
+            $downloadDocUrl = APP_PATH_WEBROOT.'DataEntry/file_download.php?pid='.PROJECT_ID."&s=&record={$r['record']}&event_id={$r['event_id']}&instance={$r['instance']}&field_name=$fieldName&id=$val&doc_id_hash=".\Files::docIdHash($val);
+            $fileDlBtn = '<button class="btn btn-defaultrc btn-xs nowrap filedownloadbtn" style="font-size:8pt;" onclick="incrementDownloadCount(\'\',this);window.open(\''.$downloadDocUrl.'\',\'_blank\');"><i class="fas fa-download fs12"></i>  '.$r['doc_name'].'</button>';
+            $val = $fileDlBtn;
         }
         return $val;
     }
@@ -1473,7 +1478,7 @@ $report = REDCap::getReport('896', 'csv', true);
 		$outputCheckboxLabel = false;
 		$includeOdmMetadata = false;
 		$storeInFileRepository = false;
-		$replaceFileUploadDocId = true;
+		$replaceFileUploadDocId = ($outputFormat!='html');
 		$liveFilterLogic = '';
 		$liveFilterGroupId = '';
 		$liveFilterEventId = '';
@@ -1482,7 +1487,7 @@ $report = REDCap::getReport('896', 'csv', true);
 		$reportData = \DataExport::doReport(
 			$report_id,
 			$outputType,
-			$outputFormat,
+			'array', // $outputFormat, 
 			$exportAsLabels,
 			$exportCsvHeadersAsLabels,
 			$outputDags,
