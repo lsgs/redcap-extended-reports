@@ -594,7 +594,7 @@ class ExtendedReports extends AbstractExternalModule
 		}
 
         try {
-            list($data_content, $num_records_returned) = $report->doExtendedReport($format, $csvDelimiter, $decimalCharacter);
+            list($data_content, $num_records_returned) = $report->doExtendedReport($format, null, $csvDelimiter, $decimalCharacter);
         } catch (\Exception $ex) {
             switch ($returnFormat) {
                 case 'csv': $data_content = $ex->getMessage(); break;
@@ -624,4 +624,41 @@ class ExtendedReports extends AbstractExternalModule
         }
         return $rtn;
     }
+
+    /**
+     * getUserRights($username=null)
+     * Patched version of REDCap::getUserRights() developer method that until at least v14.1.6 does not return form-level export permissions
+     */
+    public static function getUserRights($username=null)
+	{
+		global $data_resolution_enabled, $Proj;
+		// Make sure we are in the Project context
+		if (empty($Proj)) return; // self::checkProjectContext(__METHOD__);
+		// Get rights for this user or all users in project
+		$rights = \UserRights::getPrivileges(PROJECT_ID, $username);
+		$rights = $rights[PROJECT_ID];
+		// Loop through each user
+		if (!is_array($rights)) return [];
+		foreach ($rights as $this_user=>$attr) {
+			// Parse form-level rights
+			$allForms = explode("][", substr(trim($attr['data_entry']), 1, -1));
+			foreach ($allForms as $forminfo)
+			{
+				list($this_form, $this_form_rights) = explode(",", $forminfo, 2);
+				$rights[$this_user]['forms'][$this_form] = $this_form_rights;
+				unset($rights[$this_user]['data_entry']);
+			}
+            $allFormsExport = explode("][", substr(trim($attr['data_export_instruments']), 1, -1));
+			foreach ($allFormsExport as $forminfoExport)
+			{
+				list($this_form_export, $this_form_export_rights) = explode(",", $forminfoExport, 2);
+				$rights[$this_user]['forms_export'][$this_form_export] = $this_form_export_rights;
+				unset($rights[$this_user]['data_export_instruments']);
+			}
+			// Data resolution workflow: disable rights if module is disabled
+			if ($data_resolution_enabled != '2') $rights[$this_user]['data_quality_resolution'] = '0';
+		}
+		// Return rights
+		return $rights;
+	}
 }

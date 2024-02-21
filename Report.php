@@ -672,6 +672,10 @@ class Report
     protected function doReshapedReport($format) {
         global $lang, $Proj, $user_rights;
 
+        if (defined('USERID') && empty($user_rights)) { // e.g. api exports
+            $user_rights = $this->module::getUserRights(USERID)[USERID]; // patched version of REDCap::getUserRights()
+        }
+
         $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
@@ -1279,14 +1283,14 @@ class Report
                     $selLbls[] = $this->module->escape($choices[$valkey]);
                 }
             }
-            $valstr = implode(', ',$selVals);
+            $valstr = (count($selVals)==0) ? '' : ' <span class="text-muted">('.implode(', ',$selVals).')</span>';
             $lblstr = implode(', ',$selLbls);
             switch ($format){
                 case 'html': // return single value: labels and values of selected checkboxes "Choice 1, Choice 3 (1,3)"
                     switch ($this->report_attr['report_display_data']) {
                         case 'LABEL': $outValue = $lblstr; break;
                         case 'RAW': $outValue = $valstr; break;
-                        default: $outValue = $lblstr.' <span class="text-muted">('.$valstr.')</span>'; // BOTH
+                        default: $outValue = $lblstr.$valstr; // BOTH
                     }
                     break;
                 case 'csv':
