@@ -392,7 +392,7 @@ class Report
         $param_string = http_build_query($params, '', '&');
 
         $curlpost = curl_init();
-        curl_setopt($curlpost, CURLOPT_SSL_VERIFYPEER, FALSE);
+        curl_setopt($curlpost, CURLOPT_SSL_VERIFYPEER, TRUE);
         curl_setopt($curlpost, CURLOPT_VERBOSE, 0);
         curl_setopt($curlpost, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($curlpost, CURLOPT_AUTOREFERER, true);
