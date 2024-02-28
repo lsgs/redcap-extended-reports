@@ -474,7 +474,7 @@ class Report
         $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
         $sql = 'select * from redcap_reports where report_id=?';
-        $q = $this->module->query($sql, [$_POST['report_id']]); //TODO: Does this get sanitized upstream?
+        $q = $this->module->query($sql, [$_POST['report_id']]); 
         $this->report_attr = $q->fetch_assoc();
 
         $rows = array();
