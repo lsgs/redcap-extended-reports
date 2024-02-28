@@ -176,7 +176,8 @@ class Report
             $report_edit_access = in_array($report_id, $reports_edit_access);
         }
         $script_time_total = round(microtime(true) - $script_time_start, 1);
-
+        
+        //TODO: Evaluate if the output of the explodes in the line below can be meaningfully sanitized easily
         $downloadFilesBtnEnabled = ($user_rights['data_export_tool'] != '0' && \DataExport::reportHasFileUploadFields($report_id, (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : []), (isset($_GET['events']) ? explode(',', $_GET['events']) : [])));
 
         // Display report and title and other text
@@ -293,7 +294,7 @@ class Report
 
     protected function canViewPublic($report) {
         global $Proj, $lang, $secondary_pk, $custom_record_label;
-        $report_id = $report['report_id'] ?? $_GET['report_id'];
+        $report_id = $report['report_id'] ?? $_GET['report_id']; //TODO: Evaluate sanitizing this report_id with intval()
         \DataExport::checkReportHash($report_id);
         $report = \DataExport::getReports($report_id);
         // Make sure user has access to this report if viewing inside a project
