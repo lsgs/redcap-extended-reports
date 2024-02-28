@@ -444,7 +444,7 @@ class Report
             $decimalCharacter = isset($_POST['decimalCharacter']) ? $_POST['decimalCharacter'] : ''; //FIXME: Sanitize $decimalCharacter
             \UIState::saveUIStateValue('', 'export_dialog', 'decimalCharacter', $decimalCharacter);
 
-            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $doc_id, $csvDelimiter, $decimalCharacter); //TODO: Does this get sanitized downstream
+            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $doc_id, $csvDelimiter, $decimalCharacter); 
 
             $sql = "select docs_name from redcap_docs where docs_id = ?";
             $q = $this->module->query($sql, [$doc_id]);
