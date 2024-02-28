@@ -119,7 +119,7 @@ class Report
         // Get report info
         $report_id = $_POST['report_id'];
         if ($report_id != 'ALL' && $report_id != 'SELECTED') {
-            $report_id = (int)$report_id; //FIXME standardize use of intval or int - pick one - intval is preferred because it's in line with other things REDCap code usually does
+            $report_id = (int)$report_id; 
         }
         $report = \DataExport::getReports($report_id);
 
