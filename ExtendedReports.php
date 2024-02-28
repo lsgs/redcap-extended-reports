@@ -430,7 +430,7 @@ class ExtendedReports extends AbstractExternalModule
                 if ($settingKey==='report-id') {
                     $projectSettings['report-id'][$reportIndex] = "$report_id";
                 } else if (array_key_exists($subSettingAttrs['key'], $_POST)) {
-                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey]; //TODO: Review to determine if this should be sanitized
+                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey]; //FIXME: These keys should probably be sanitized with htmlspecialchars()
                 } 
             }
         }
