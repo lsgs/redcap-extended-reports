@@ -386,7 +386,7 @@ class ExtendedReports extends AbstractExternalModule
         $reportIndex = ($hasEMConfig) ? $idx : count($rptConfig);
         
         // tweaks to $_POST for settings that are not submitted from client
-        if (array_key_exists('rpt-sql', $_POST) && $_POST['rpt-sql']!='') { //TODO: Wait do we really allow this? Where is the rpt-sql passed in? Is this just AJAXing from a GUI definition?
+        if (array_key_exists('rpt-sql', $_POST) && $_POST['rpt-sql']!='') { 
             if ($this->getUser()->isSuperUser()) {
                 $_POST['rpt-is-sql'] = true;
                 $_POST['advanced_logic'] = '['.$Proj->table_pk.']=""'; // never return any records if somehow run without sql
@@ -397,7 +397,7 @@ class ExtendedReports extends AbstractExternalModule
 
                 $_POST['rpt-sql'] = rtrim(trim($this->stripTabs($_POST['rpt-sql'])), ";");
                 if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){ //TODO: Find out if we can break this into multiple SQL queries downstream and land an INSERT or something
-                    throw new \Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']); //TODO: Make this a variable and sanitize and/or review further for reflected XSS
+                    throw new \Exception('SQL is not a SELECT query \n<br> '.htmlspecialchars($_POST['rpt-sql'])); //Sanitize the post to prevent non-persistent reflected XSS
                 }
             } else {
                 unset($_POST['rpt-sql']);
