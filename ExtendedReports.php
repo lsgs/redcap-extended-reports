@@ -397,7 +397,7 @@ class ExtendedReports extends AbstractExternalModule
 
                 $_POST['rpt-sql'] = rtrim(trim($this->stripTabs($_POST['rpt-sql'])), ";");
                 if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){ //TODO: Find out if we can break this into multiple SQL queries downstream and land an INSERT or something
-                    throw new \Exception('SQL is not a SELECT query \n<br> '.htmlspecialchars($_POST['rpt-sql'])); //Sanitize the post to prevent non-persistent reflected XSS
+                    throw new \Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']);
                 }
             } else {
                 unset($_POST['rpt-sql']);
