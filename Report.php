@@ -119,7 +119,7 @@ class Report
         // Get report info
         $report_id = $_POST['report_id'];
         if ($report_id != 'ALL' && $report_id != 'SELECTED') {
-            $report_id = (int)$report_id;
+            $report_id = (int)$report_id; //FIXME standardize use of intval or int - pick one - intval is preferred because it's in line with other things REDCap code usually does
         }
         $report = \DataExport::getReports($report_id);
 
@@ -441,10 +441,10 @@ class Report
             $csvDelimiter = (isset($_POST['csvDelimiter']) && \DataExport::isValidCsvDelimiter($_POST['csvDelimiter'])) ? $_POST['csvDelimiter'] : ",";
             \UIState::saveUIStateValue('', 'export_dialog', 'csvDelimiter', $csvDelimiter);
             if ($csvDelimiter == 'tab') $csvDelimiter = "\t";
-            $decimalCharacter = isset($_POST['decimalCharacter']) ? $_POST['decimalCharacter'] : '';
+            $decimalCharacter = isset($_POST['decimalCharacter']) ? $_POST['decimalCharacter'] : ''; //FIXME: Sanitize $decimalCharacter
             \UIState::saveUIStateValue('', 'export_dialog', 'decimalCharacter', $decimalCharacter);
 
-            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $doc_id, $csvDelimiter, $decimalCharacter);
+            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $doc_id, $csvDelimiter, $decimalCharacter); //TODO: Does this get sanitized downstream
 
             $sql = "select docs_name from redcap_docs where docs_id = ?";
             $q = $this->module->query($sql, [$doc_id]);
@@ -474,7 +474,7 @@ class Report
         $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
         $sql = 'select * from redcap_reports where report_id=?';
-        $q = $this->module->query($sql, [$_POST['report_id']]);
+        $q = $this->module->query($sql, [$_POST['report_id']]); //TODO: Does this get sanitized upstream?
         $this->report_attr = $q->fetch_assoc();
 
         $rows = array();
