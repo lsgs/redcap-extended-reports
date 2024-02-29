@@ -386,7 +386,7 @@ class ExtendedReports extends AbstractExternalModule
         $reportIndex = ($hasEMConfig) ? $idx : count($rptConfig);
         
         // tweaks to $_POST for settings that are not submitted from client
-        if (array_key_exists('rpt-sql', $_POST) && $_POST['rpt-sql']!='') {
+        if (array_key_exists('rpt-sql', $_POST) && $_POST['rpt-sql']!='') { 
             if ($this->getUser()->isSuperUser()) {
                 $_POST['rpt-is-sql'] = true;
                 $_POST['advanced_logic'] = '['.$Proj->table_pk.']=""'; // never return any records if somehow run without sql
@@ -396,7 +396,7 @@ class ExtendedReports extends AbstractExternalModule
                 }
 
                 $_POST['rpt-sql'] = rtrim(trim($this->stripTabs($_POST['rpt-sql'])), ";");
-                if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){
+                if (!preg_match("/^select\s/i", $_POST['rpt-sql'])){ 
                     throw new \Exception('SQL is not a SELECT query \n<br> '.$_POST['rpt-sql']);
                 }
             } else {
@@ -430,7 +430,7 @@ class ExtendedReports extends AbstractExternalModule
                 if ($settingKey==='report-id') {
                     $projectSettings['report-id'][$reportIndex] = "$report_id";
                 } else if (array_key_exists($subSettingAttrs['key'], $_POST)) {
-                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey];
+                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey]; //FIXME: These keys should probably be sanitized with htmlspecialchars()
                 } 
             }
         }
