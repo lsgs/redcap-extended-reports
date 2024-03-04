@@ -430,13 +430,13 @@ class ExtendedReports extends AbstractExternalModule
                 if ($settingKey==='report-id') {
                     $projectSettings['report-id'][$reportIndex] = "$report_id";
                 } else if (array_key_exists($subSettingAttrs['key'], $_POST)) {
-                    $projectSettings[$settingKey][$reportIndex] = $_POST[$settingKey]; //FIXME: These keys should probably be sanitized with htmlspecialchars()
+                    $projectSettings[$settingKey][$reportIndex] = $this->escape($_POST[$settingKey]);
                 } 
             }
         }
         $this->setProjectSettings($projectSettings);
 
-        $this->log("save report id $report_id", $this->escape(array_merge(['is-new'=>!$hasEMConfig], (is_null($rpt))?$_POST:$rpt)));
+        $this->log("save report id $report_id", $this->escape(array_merge(['is-new'=>!$hasEMConfig], (is_null($rpt))?$this->escape($_POST):$rpt)));
         
         return null;
     }
