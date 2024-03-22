@@ -12,6 +12,12 @@
     "framework-version": 14,
     "enable-every-page-hooks-on-system-pages": true,
     "system-settings": [
+        {
+            "key": "override-curl-verify",
+            "name": "Disable internal certificate verification<br><span class=\"text-muted\">Disable the certificate check for internal curl call required for data exports. Not recommended for Production use.</span>",
+            "type": "checkbox",
+            "super-users-only": true
+        }
     ],
     "project-settings": [
         {

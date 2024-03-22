@@ -372,7 +372,8 @@ class Report
      */
     public function exportReport() {
         global $Proj, $lang;
-
+        
+        $sslVerify = !($this->module->getSystemSetting('override-curl-verify')=='1');
         $url = APP_PATH_WEBROOT_FULL."redcap_v".REDCAP_VERSION."/DataExport/data_export_ajax.php?pid=".$Proj->project_id."&xml_metadata_options=&extended_report_hook_bypass=1";
         $timeout = null;
         $content_type = 'application/x-www-form-urlencoded';
@@ -392,7 +393,7 @@ class Report
         $param_string = http_build_query($params, '', '&');
 
         $curlpost = curl_init();
-        curl_setopt($curlpost, CURLOPT_SSL_VERIFYPEER, TRUE);
+        curl_setopt($curlpost, CURLOPT_SSL_VERIFYPEER, $sslVerify);
         curl_setopt($curlpost, CURLOPT_VERBOSE, 0);
         curl_setopt($curlpost, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($curlpost, CURLOPT_AUTOREFERER, true);
@@ -612,7 +613,7 @@ class Report
     protected function doSqlReport() {
         global $Proj,$user_rights;
         
-        $sql = rtrim(trim($this->sql_query), ";");
+        $sql = str_replace('&#039;',"'",rtrim(trim($this->sql_query), ";")); // trim and replace quote entities from htmlspecialchars
         $sql = \Piping::pipeSpecialTags($sql, $this->project_id); // user and misc tags will work
         if (!preg_match("/^select\s/i", $sql)) {
             return array('Not a select query', 0);
