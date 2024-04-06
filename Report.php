@@ -82,14 +82,16 @@ class Report
                     case 'rpt-sql-disable-dag-filter': 
                         $val = (bool)$val;
                         break;
+                    case 'rpt-sql':
+                        $val = htmlspecialchars_decode(rtrim(trim($val), ";"), ENT_QUOTES);
+                        break;
                     case 'rpt-reshape-event':
                         if (!$p->longitudinal && !empty($val)) $val = '';
                         break;
                     case 'rpt-reshape-instance':
                         if (!$p->hasRepeatingFormsEvents() && !empty($val)) $val = '';
                         break;
-                    case 'rpt-sql':
-                        default:
+                    default:
                         break;
                 }
                 $this->$instanceVar = $val;
@@ -468,6 +470,7 @@ class Report
     
     public function doExtendedReport($format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
         global $Proj;
+        $Proj = $Proj ?? new \Project($this->project_id);
         $Proj->loadEventsForms(); // ensure full initialisation in db
         $csvDelimiter = (empty($csvDelimiter)) ? \UIState::getUIStateValue('', 'export_dialog', 'csvDelimiter') : $csvDelimiter;
         $csvDelimiter = (empty($csvDelimiter)) ? static::DEFAULT_CSV_DELIMITER : $csvDelimiter;
@@ -613,7 +616,7 @@ class Report
     protected function doSqlReport() {
         global $Proj,$user_rights;
         
-        $sql = str_replace('&#039;',"'",rtrim(trim($this->sql_query), ";")); // trim and replace quote entities from htmlspecialchars
+        $sql = $this->sql_query;
         $sql = \Piping::pipeSpecialTags($sql, $this->project_id); // user and misc tags will work
         if (!preg_match("/^select\s/i", $sql)) {
             return array('Not a select query', 0);
