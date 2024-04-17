@@ -13,8 +13,9 @@ require_once 'Report.php';
 class ExtendedReports extends AbstractExternalModule
 {
     protected const SQL_OPTION_TD0_HTML = '<b><i class="fas fa-th mr-1"></i>Custom SQL Query</b><div class="wrap" style="color:#888;font-size:11px;line-height:12px;margin-top:5px;">Administrators only<br>SELECT queries only</div>';
-    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox" style="height:45px;font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box to <strong>disable DAG filtering</strong> <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
+    protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox form-control" rows="5" style="font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box to <strong>disable DAG filtering</strong> <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
     protected const SQL_OPTION_TD1_HTML_PLEB = '<span class="rpt-sql-pleb">MAG<i class="fas fa-magic rpt-sql-wiggle5" style="margin-right:-5px;"></i>C<sup><i class="far fa-star rpt-sql-wiggle5 ml-1" style="font-size:85%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:70%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:50%"></sup></span>';
+    protected const SQL_NEWLINE_REPLACEMENT = '|EXTRPT:NL|';
     protected $report_id = null;
 
     /**
@@ -199,7 +200,9 @@ class ExtendedReports extends AbstractExternalModule
      */
     protected function includeSqlOption($create=true, $sql='', $disableDagFilter=false) {
         global $lang;
-        $queryLines = (empty(trim($sql)))?'':preg_split("/\r?\n|\r/", trim($sql));
+        $queryText = preg_replace("/\r?\n|\r/",self::SQL_NEWLINE_REPLACEMENT,trim($sql));
+        $queryText = str_replace('\\','\\\\',$queryText);
+        
         $displaycb = ($create) ? 'block' : 'none';
         $displayta = ($create) ? 'none' : 'block';
         $td0Html = static::SQL_OPTION_TD0_HTML;
@@ -251,11 +254,11 @@ class ExtendedReports extends AbstractExternalModule
                     growTextarea("rpt-sql");
                 });
 
-                var queryLines = JSON.parse('<?=\js_escape(\json_encode($queryLines))?>');
+                var sqlText = '<?=\js_escape($queryText)?>'.replaceAll('<?=self::SQL_NEWLINE_REPLACEMENT?>','\n');
 
-                if (queryLines.length>0) {
+                if (sqlText.length>0) {
                     if($('#rpt-sql-block').length) {
-                        $('#rpt-sql').html(queryLines.join('\n'));
+                        $('#rpt-sql').html(sqlText);
                         $('#rpt-sql-expand').trigger('click');
                     }
                     hideRptTrs();
@@ -598,7 +601,7 @@ class ExtendedReports extends AbstractExternalModule
         } catch (\Exception $ex) {
             switch ($returnFormat) {
                 case 'csv': $data_content = $ex->getMessage(); break;
-                case 'json': '{error:'.$data_content = $ex->getMessage().'}'; break;
+                case 'json': $data_content = '{error:'.$ex->getMessage().'}'; break;
                 default: // xml
                     $data_content = '<?xml version="1.0" encoding="UTF-8" ?><error>'.$ex->getMessage().'</error>';
                     break;

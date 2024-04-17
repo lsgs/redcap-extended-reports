@@ -26,6 +26,7 @@ class Report
     protected $report_attr = array(); // will be array of values read from the report's record in redcap_reports
     protected $dag_names = array();
     protected $record_labels = array();
+    protected $record_lowest_arm = array();
     public $is_extended = false;
     public $is_sql = false;
     public $sql_disable_dag_filter = false;
@@ -586,9 +587,8 @@ class Report
                 }
             }
 
-            $output[] = \json_encode($content);
-            $output[] = $num_results_returned;
-
+            $return_content = \json_encode($content);
+            
         } else if ($format=='xml') { 
             $indent = '    ';
             $return_content = '<?xml version="1.0" encoding="UTF-8" ?>'.PHP_EOL.'<records>';
@@ -716,11 +716,19 @@ class Report
         
         $columnsResult = $this->module->query($sql, [$this->report_id]);
         $hasSplitCbOrInstances = false;
+        $pkIncluded = false;
         $viewOnlyVars = array();
 
         while($thisHdr = $columnsResult->fetch_assoc()){
-            $thisHdr['unique_name'] = $eventUniqueNames[$thisHdr['event_id']];
+            if ($thisHdr['field_name']==\REDCap::getRecordIdField()) {
+                if ($pkIncluded) {
+                    continue; // don't duplicate if collapsing across arms
+                } else {
+                    $pkIncluded = true;
+                }
+            }
 
+            $thisHdr['unique_name'] = $eventUniqueNames[$thisHdr['event_id']];
             $thisHdr['element_label'] = $Proj->metadata[$thisHdr['field_name']]['element_label'];
             if ($thisHdr['field_name'] == $thisHdr['form_name'].'_complete') {
                 $thisHdr['element_label'] = $Proj->forms[$thisHdr['form_name']]['menu'].' '.$thisHdr['element_label']; // "Form Name Complete?"
@@ -955,8 +963,26 @@ class Report
 
             $rows[] = $thisRow;
         }
-        $crl = \Records::getCustomRecordLabelsSecondaryFieldAllRecords(array_keys($report_data));
-        $this->record_labels = (is_array($crl)) ? $crl : array();
+        if ($format=='html') {
+            $this->record_labels = array();
+            $this->record_lowest_arm = array();
+            $reportRecordsByArm = \Records::getRecordListPerArm($this->project_id, array_keys($report_data), null, true);
+            $crlByArm = \Records::getCustomRecordLabelsSecondaryFieldAllRecords(array_keys($report_data),false,'all'); // all arms
+            foreach ($reportRecordsByArm as $armNum => $armRecs) {
+                foreach ($armRecs as $rec) {
+                    if (!array_key_exists($rec, $this->record_lowest_arm)) {
+                        // record home page link to record's lowest-numbered arm 
+                        $this->record_lowest_arm[$rec] = $armNum;
+                    }
+                    if (array_key_exists($armNum, $crlByArm) && array_key_exists($rec, $crlByArm[$armNum])) {
+                        $recArmLbl = $crlByArm[$armNum][$rec];
+                        if (!array_key_exists($rec, $this->record_labels) || !in_array($recArmLbl, $this->record_labels[$rec])) {
+                            $this->record_labels[$rec][$armNum] = $crlByArm[$armNum][$rec];
+                        }
+                    }
+                }
+            }
+        }
         return array($rows, $headers, $hasSplitCbOrInstances);
     }
 
@@ -1004,6 +1030,9 @@ class Report
             } else if ($fldName==='redcap_data_access_group') {
                 global $lang;
                 $title = $lang['global_78'];
+            } else if ($fldName===\REDCap::getRecordIdField()) {
+                // collapsing by event, so event/arm info not relevant for pk field
+                $title = $this->truncateLabel(\REDCap::filterHtml($th['element_label']));
             } else {
                 $evtLabel = '';
                 if ($Proj->longitudinal) $evtLabel .= \REDCap::filterHtml($th['descrip']);
@@ -1227,12 +1256,23 @@ class Report
     }
 
     protected function makePkDisplay($record, $outputFormat) {
-        global $Proj;
+        global $Proj,$lang;
         $recordDisplay = $record;
         if ($outputFormat=='html') {
-            $crl = (array_key_exists($record, $this->record_labels)) ? $this->record_labels[$record] : ''; // $crl = \Records::getCustomRecordLabelsSecondaryFieldAllRecords($record, false, 'all');
-            $recordDisplay = "<a class='mr-1' target='_blank' href='".APP_PATH_WEBROOT."DataEntry/record_home.php?pid=$Proj->project_id&id=$record'>$record</a>";
-            $recordDisplay = trim("$recordDisplay $crl");
+            $lowestArm = (array_key_exists($record, $this->record_lowest_arm)) ? $this->record_lowest_arm[$record] : 1;
+            $homeLink = "<a class='mr-1' target='_blank' href='".APP_PATH_WEBROOT."DataEntry/record_home.php?pid=$Proj->project_id&id=$record&arm=$lowestArm'>$record</a>";
+            $crl = '';
+            if (array_key_exists($record, $this->record_labels)) {
+                if (count($this->record_labels[$record]) > 1) {
+                    foreach ($this->record_labels[$record] as $armNum => $armRecLbl) {
+                        $crl .= $lang['global_08']." $armNum: $armRecLbl<br>";
+                    }
+                    $crl = '<span class="crl">'.trim($crl,'<br>').'</span>';
+                } else {
+                    $crl = $this->record_labels[$record][$this->record_lowest_arm[$record]];
+                }
+            }
+            $recordDisplay = trim("$homeLink $crl");
         } 
         return $recordDisplay;
     }
