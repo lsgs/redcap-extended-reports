@@ -84,7 +84,7 @@ class Report
                         $val = (bool)$val;
                         break;
                     case 'rpt-sql':
-                        $val = htmlspecialchars_decode(rtrim(trim($val), ";"), ENT_QUOTES);
+                        $val = rtrim(trim(htmlspecialchars_decode($val, ENT_QUOTES)), ";");
                         break;
                     case 'rpt-reshape-event':
                         if (!$p->longitudinal && !empty($val)) $val = '';
@@ -545,8 +545,11 @@ class Report
         } else if ($format=='csv' || $format=='csvraw' || $format=='csvlabels') { 
             $return_content = ""; // If no results will return empty CSV with no headers (follows pattern of regular data exports)
             if ($num_results_returned > 0) {
+                // api calls (format csv) have independent raw/label options for headers and values  
+                $valFormat = ($format=='csv' && isset($_POST['rawOrLabel']) && $_POST['rawOrLabel']==='label') ? 'csvlabels' : $format; 
+                $hdrFormat = ($format=='csv' && isset($_POST['rawOrLabelHeaders']) && $_POST['rawOrLabelHeaders']==='label') ? 'csvlabels' : $format; 
                 foreach($headers as $th) {
-                    foreach ($this->makeExportColTitles($th, $format) as $thisColTitle) {
+                    foreach ($this->makeExportColTitles($th, $hdrFormat) as $thisColTitle) {
                         $return_content .= $this->makeCsvValue($thisColTitle, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                     }
                 }
@@ -558,13 +561,13 @@ class Report
                         if ($headers[$fldIdx]['instance_count']>0 && $this->reshape_instance==='cols') {
                             // for split instances $td will be an array of instance values (array of arrays for checkboxes)
                             foreach ($td as $thisInstanceTd) {
-                                $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fldIdx]['field_name'], $format, $decimalCharacter);
+                                $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fldIdx]['field_name'], $valFormat, $decimalCharacter);
                                 foreach ($thisFieldValue as $thisValue) {
                                     $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                                 }
                             }
                         } else {
-                            $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $format, $decimalCharacter, $csvDelimiter);
+                            $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
                             foreach ($thisFieldValue as $thisValue) {
                                 $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                             }
@@ -581,6 +584,15 @@ class Report
                     $rowObj = new \stdClass();
                     foreach ($row as $field => $value) {
                         $fieldName = $headers[$field]['field_name'];
+
+                        if (isset($_POST['rawOrLabel']) && $_POST['rawOrLabel']=='label') {
+                            $thisFieldValue = $this->makeOutputValue($value, $fieldName, 'csvlabels', $decimalCharacter);
+                            foreach ($thisFieldValue as $thisValue) {
+                                $value .= $thisValue;
+                            }
+
+                        }
+
                         $rowObj->$fieldName = $value;
                     }
                     $content[] = $rowObj;
@@ -680,7 +692,7 @@ class Report
             $user_rights = $this->module::getUserRights(USERID)[USERID]; // patched version of REDCap::getUserRights()
         }
 
-        $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers
+        $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers when impersonating
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
         $headers = array();
@@ -689,16 +701,21 @@ class Report
         $efResult = $this->module->query("select count(*) as num_filter_events from redcap_reports_filter_events where report_id=?",[$this->report_id]);
         $num_filter_events = $efResult->fetch_assoc()['num_filter_events'];
 
+        $firstEvent = intval($Proj->firstEventId);
+        $firstForm = $this->module->escape($Proj->firstForm);
+
         $sql = 'select r.report_id, r.project_id, ea.arm_id, ea.arm_name, em.event_id, em.descrip, ';
         $sql .= ($num_filter_events > 0) ? 'if(rfe.event_id is null,0,1) ' : '1 ';
         $sql .= 'as in_filter, ef.form_name, rf.field_name, rf.field_order, m.element_type
             from redcap_reports r
             inner join redcap_events_arms ea on r.project_id=ea.project_id
             inner join redcap_events_metadata em on ea.arm_id=em.arm_id
-            inner join redcap_events_forms ef on em.event_id=ef.event_id
+            inner join (
+                select event_id, form_name from redcap_events_forms union select ?, ? 
+            ) ef on em.event_id=ef.event_id
             inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
             inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name 
-            ';
+            '; // n.b. redcap_event_forms in union with first event/form because first form and event may not be present in table for projects created as "empty/blank slate" (not from existing project or xml)
         if ($num_filter_events > 0) {
             $sql .= 'inner join redcap_reports_filter_events rfe on r.report_id=rfe.report_id and em.event_id=rfe.event_id ';
         }
@@ -714,7 +731,7 @@ class Report
             $sql .= 'order by rf.field_order';
         }
         
-        $columnsResult = $this->module->query($sql, [$this->report_id]);
+        $columnsResult = $this->module->query($sql, [$firstEvent, $firstForm, $this->report_id]);
         $hasSplitCbOrInstances = false;
         $pkIncluded = false;
         $viewOnlyVars = array();
@@ -1075,9 +1092,9 @@ class Report
         if ($this->is_sql) {
             $evt = '';
             $sep = '';
-            $th['element_label'] = $th['element_label'] ?? $th['field_name'];
+            $th['element_label'] = strip_tags($th['element_label']) ?? $th['field_name'];
         } else if ($format=='csvlabels') {
-            $evt = ($Proj->multiple_arms) ? $th['descrip'].' '.$th['arm_name'] : $th['descrip'];
+            $evt = ($Proj->multiple_arms) ? strip_tags($th['descrip'].' '.$th['arm_name']) : strip_tags($th['descrip']);
             $sep = ' ';
         } else {
             $evt = $th['unique_name'];
@@ -1088,14 +1105,14 @@ class Report
         
             foreach ($th['subvalues'] as $thsv) {
                 if ($format=='csvlabels') {
-                    $varNames[] = $this->truncateLabel($th['element_label'])." (choice=".$choices[$thsv].")";
+                    $varNames[] = $this->truncateLabel(strip_tags($th['element_label']))." (choice=".strip_tags($choices[$thsv]).")";
                 } else {
                     $varNames[] = $th['field_name'].'___'.$thsv;
                 }
             }
         } else {
             if ($format=='csvlabels') {
-                $varNames[] = $this->truncateLabel($th['element_label']);
+                $varNames[] = $this->truncateLabel(strip_tags($th['element_label']));
             } else {
                 $varNames[] = $th['field_name'];
             }
@@ -1232,7 +1249,7 @@ class Report
             }
         } else {
             $returnValue = '';
-            $value = trim($value);
+            $value = trim(strip_tags($value));
             if (in_array(substr($value, 0, 1), self::$csvInjectionChars)) {
                 // Prevent CSV injection for Excel - add space in front if first character is -, @, +, or = (http://georgemauer.net/2017/10/07/csv-injection.html)
                 $value = " $value";
@@ -1428,8 +1445,9 @@ class Report
             default:
                 if (strpos($valType, 'number')===0) {
                     $outVal = str_replace('.',$decimalCharacter,$val);
+                } else {
+                    $outVal = $val;
                 }
-                $outVal = $val;
                 break;
         }
         return \REDCap::filterHtml($outVal);
