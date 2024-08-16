@@ -508,7 +508,7 @@ class ExtendedReports extends AbstractExternalModule
             foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
                 $settingKey = $subSettingAttrs['key'];
                 unset($projectSettings[$settingKey][$erIdx]);
-                reset($projectSettings[$settingKey]);
+                if (is_array($projectSettings[$settingKey])) reset($projectSettings[$settingKey]); // #27 #29
             }
         }
 

@@ -695,27 +695,31 @@ class Report
         $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers when impersonating
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
-        $headers = array();
+        $headers = $params = array();
         $eventUniqueNames = \REDCap::getEventNames(true);
 
         $efResult = $this->module->query("select count(*) as num_filter_events from redcap_reports_filter_events where report_id=?",[$this->report_id]);
         $num_filter_events = $efResult->fetch_assoc()['num_filter_events'];
-
-        $firstEvent = intval($Proj->firstEventId);
-        $firstForm = $this->module->escape($Proj->firstForm);
 
         $sql = 'select r.report_id, r.project_id, ea.arm_id, ea.arm_name, em.event_id, em.descrip, ';
         $sql .= ($num_filter_events > 0) ? 'if(rfe.event_id is null,0,1) ' : '1 ';
         $sql .= 'as in_filter, ef.form_name, rf.field_name, rf.field_order, m.element_type
             from redcap_reports r
             inner join redcap_events_arms ea on r.project_id=ea.project_id
-            inner join redcap_events_metadata em on ea.arm_id=em.arm_id
-            inner join (
-                select event_id, form_name from redcap_events_forms union select ?, ? 
-            ) ef on em.event_id=ef.event_id
-            inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
-            inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name 
-            '; // n.b. redcap_event_forms in union with first event/form because first form and event may not be present in table for projects created as "empty/blank slate" (not from existing project or xml)
+            inner join redcap_events_metadata em on ea.arm_id=em.arm_id ';
+
+        if (\REDCap::isLongitudinal()) {
+            $sql .= 'inner join redcap_events_forms ef on em.event_id=ef.event_id ';
+            $params[] = $this->report_id;
+        } else {
+             // n.b. some non-longitudinal projects may not have all forms included in redcap_event_forms, so simulating a complete listing in subquery
+             $params[] = intval($Proj->firstEventId);
+             $params[] = intval($Proj->project_id);
+             $params[] = $this->report_id;
+             $sql .= 'inner join (select distinct(form_name), ? as event_id from redcap_metadata where project_id=? ef on em.event_id=ef.event_id ';
+        }
+        $sql .= 'inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
+            inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name ';
         if ($num_filter_events > 0) {
             $sql .= 'inner join redcap_reports_filter_events rfe on r.report_id=rfe.report_id and em.event_id=rfe.event_id ';
         }
@@ -731,7 +735,7 @@ class Report
             $sql .= 'order by rf.field_order';
         }
         
-        $columnsResult = $this->module->query($sql, [$firstEvent, $firstForm, $this->report_id]);
+        $columnsResult = $this->module->query($sql, $params);
         $hasSplitCbOrInstances = false;
         $pkIncluded = false;
         $viewOnlyVars = array();
@@ -1274,7 +1278,7 @@ class Report
 
     protected function makePkDisplay($record, $outputFormat) {
         global $Proj,$lang;
-        $recordDisplay = $record;
+        $recordDisplay = $record = (string)$record;
         if ($outputFormat=='html') {
             $lowestArm = (array_key_exists($record, $this->record_lowest_arm)) ? $this->record_lowest_arm[$record] : 1;
             $homeLink = "<a class='mr-1' target='_blank' href='".APP_PATH_WEBROOT."DataEntry/record_home.php?pid=$Proj->project_id&id=$record&arm=$lowestArm'>$record</a>";
