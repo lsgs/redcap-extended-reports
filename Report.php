@@ -463,7 +463,13 @@ class Report
         } else {
             $data_edoc_id = false;
         }
-        if ($data_edoc_id === false) $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
+        if ($data_edoc_id === false) {
+            if (empty(trim($dialog_content))) {
+                $dialog_content = "<p style='color:red'>The raw data for this export could not be downloaded, therefore it could not be reshaped.</p><p>This problem can be caused by a server configuration issue. Ask your administrator to review the system-level settings for the \"Extended Reports\" external module.";
+            } else {
+                $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
+            }
+        }
 
         header('Content-Type: application/json');
         print \json_encode_rc(array('title'=>$dialog_title, 'content'=>$dialog_content));
@@ -716,7 +722,7 @@ class Report
              $params[] = intval($Proj->firstEventId);
              $params[] = intval($Proj->project_id);
              $params[] = $this->report_id;
-             $sql .= 'inner join (select distinct(form_name), ? as event_id from redcap_metadata where project_id=? ef on em.event_id=ef.event_id ';
+             $sql .= 'inner join (select distinct(form_name), ? as event_id from redcap_metadata where project_id=?) ef on em.event_id=ef.event_id ';
         }
         $sql .= 'inner join redcap_metadata m on r.project_id=m.project_id and ef.form_name=m.form_name
             inner join redcap_reports_fields rf on r.report_id=rf.report_id and m.field_name=rf.field_name ';
@@ -1192,7 +1198,7 @@ class Report
             $outValue = (is_array($value)) ? array_fill_keys(array_keys($value), "-") : "-"; // User has no rights to this field
         } else if (in_array($field['element_type'], array("advcheckbox", "radio", "select", "checkbox", "dropdown", "sql", "yesno", "truefalse"))) {
             $outValue = $this->makeChoiceDisplay($value, $fieldName, $outputFormat, $decimalCharacter, $delimiter);
-        } else if ($field['element_type']==='notes') {
+        } else if ($field['element_type']==='notes' || $field['element_type']==='textarea') {
             $outValue = $this->makeTextDisplay($value, $fieldName, '', $outputFormat, $decimalCharacter);
         } else if ($field['element_type']==='file') {
             $outValue = $this->makeFileDisplay($value, $fieldName, $outputFormat);
@@ -1433,6 +1439,7 @@ class Report
     }
 
     protected function makeTextDisplay($val, $fieldName, $valType, $outputFormat, $decimalCharacter) {
+        $val = (is_string($val)) ? $val : json_encode($val);
         if (trim($val)=='') { return ''; }
         switch ($valType) {
             case 'date_mdy':
