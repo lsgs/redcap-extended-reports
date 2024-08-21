@@ -501,14 +501,14 @@ class ExtendedReports extends AbstractExternalModule
         $config = $this->getConfig();
         
         unset($projectSettings['report-config'][$erIdx]);
-        reset($projectSettings['report-config']);
+        $projectSettings['report-config'] = array_values($projectSettings['report-config']);
 
         foreach($config['project-settings'] as $projectSettingArray) {
             if ($projectSettingArray['key']!=='report-config') continue;
             foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
                 $settingKey = $subSettingAttrs['key'];
                 unset($projectSettings[$settingKey][$erIdx]);
-                if (is_array($projectSettings[$settingKey])) reset($projectSettings[$settingKey]); // #27 #29
+                if (is_array($projectSettings[$settingKey])) $projectSettings[$settingKey] = array_values($projectSettings[$settingKey]); // #27 #29
             }
         }
 

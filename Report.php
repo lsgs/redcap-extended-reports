@@ -127,8 +127,11 @@ class Report
         $report = \DataExport::getReports($report_id);
 
         // Checks for public reports
-        if (\DataExport::isPublicReport() && !$this->canViewPublic($report)) {
-            return;
+        if (\DataExport::isPublicReport()) {
+            if (!defined('PROJECT_ID')) define('PROJECT_ID', \DataExport::getProjectIdFromReportId($report_id));
+            if (!$this->canViewPublic($report)) {
+                return;
+            }
         }
 
         $script_time_start = microtime(true);
@@ -173,11 +176,15 @@ class Report
         //    $totalRecordsQueried = $num_results_returned;
         //}
         // Check report edit permission
-        $report_edit_access = defined("SUPER_USER") ? SUPER_USER : 0;
-        if ((!defined("SUPER_USER") || !SUPER_USER) && is_numeric($report_id)) {
+        if (defined("SUPER_USER") && SUPER_USER) {
+            $report_edit_access = SUPER_USER;
+        } else if (defined("USERID")) {
             $reports_edit_access = \DataExport::getReportsEditAccess(USERID, $user_rights['role_id'], $user_rights['group_id'], $report_id);
             $report_edit_access = in_array($report_id, $reports_edit_access);
+        } else {
+            $report_edit_access = 0;
         }
+
         $script_time_total = round(microtime(true) - $script_time_start, 1);
         
         $downloadFilesBtnEnabled = ($user_rights['data_export_tool'] != '0' && \DataExport::reportHasFileUploadFields($report_id));
@@ -297,7 +304,7 @@ class Report
     protected function canViewPublic($report) {
         global $Proj, $lang, $secondary_pk, $custom_record_label;
         $report_id = $report['report_id'] ?? intval($_GET['report_id']);
-        \DataExport::checkReportHash($report_id);
+//        \DataExport::checkReportHash($report_id);
         $report = \DataExport::getReports($report_id);
         // Make sure user has access to this report if viewing inside a project
         $noAccess = false;
