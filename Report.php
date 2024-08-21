@@ -6,6 +6,12 @@
  */
 namespace MCRI\ExtendedReports;
 
+use Vanderbilt\REDCap\Classes\Cache\REDCapCache;
+use Vanderbilt\REDCap\Classes\Cache\CacheFactory;
+use Vanderbilt\REDCap\Classes\Cache\CacheLogger;
+use Vanderbilt\REDCap\Classes\Cache\States\DisabledState;
+use Vanderbilt\REDCap\Classes\Cache\InvalidationStrategies\ProjectActivityInvalidation;
+
 class Report
 {
     protected const DEFAULT_CSV_DELIMITER = ',';
@@ -14,10 +20,10 @@ class Report
     protected const DEFAULT_DECIMAL_CHAR = '.';
     protected static $csvInjectionChars = array("-", "@", "+", "=");
     protected static $reportAttributeMap = array(
-        "rpt-is-sql"=>"is_sql", 
-        "rpt-sql-disable-dag-filter"=>"sql_disable_dag_filter", 
-        "rpt-sql"=>"sql_query", 
-        "rpt-reshape-event"=>"reshape_event", 
+        "rpt-is-sql"=>"is_sql",
+        "rpt-sql-disable-dag-filter"=>"sql_disable_dag_filter",
+        "rpt-sql"=>"sql_query",
+        "rpt-reshape-event"=>"reshape_event",
         "rpt-reshape-instance"=>"reshape_instance"
     );
     protected $project_id;
@@ -34,14 +40,14 @@ class Report
     public $is_reshaped = false;
     public $reshape_event = null;
     public $reshape_instance = null;
-
+    
     public function __construct($project_id, $report_id, ExtendedReports $module) {
         $this->report_id = $report_id;
         $this->module = $module;
         $this->setProjectId($project_id, $report_id);
         $this->readExtendedAttributes($this->report_id);
     }
-
+    
     protected function setProjectId($project_id, $report_id=null) {
         if (empty($project_id)) {
             // report id but no project id can happen e.g. on public report page
@@ -52,7 +58,7 @@ class Report
         }
         $this->project_id = intval($project_id);
     }
-
+    
     /**
      * readExtendedAttributes
      * Read any module settings for the specified report id
@@ -63,24 +69,24 @@ class Report
         $hasExtConfig = false;
         foreach($rptConfig as $rpt) {
             if ($rpt['report-id']==$report_id) {
-                $hasExtConfig = true; break; 
+                $hasExtConfig = true; break;
             }
         }
         if (!$hasExtConfig) return;
-
+        
         // guard against out-of-date config e.g. after project not longitudinal anymore
         global $Proj;
         $p = $Proj ?? new \Project($this->project_id);
-
-        // return the report as having extended attributes if ANY rpt- attributes is not empty 
+        
+        // return the report as having extended attributes if ANY rpt- attributes is not empty
         // (if all rpt- attrs are empty then not an extended report)
         foreach ($rpt as $attr => $val) {
             if (array_key_exists($attr, static::$reportAttributeMap) && !empty($val)) {
                 $this->is_extended = true;
                 $instanceVar = static::$reportAttributeMap[$attr];
                 switch ($attr) {
-                    case 'rpt-is-sql': 
-                    case 'rpt-sql-disable-dag-filter': 
+                    case 'rpt-is-sql':
+                    case 'rpt-sql-disable-dag-filter':
                         $val = (bool)$val;
                         break;
                     case 'rpt-sql':
@@ -99,16 +105,16 @@ class Report
             }
         }
     }
-
+    
     /**
      * viewReport()
-     * Basically a copy of redcap_v13.4.12/DataExport/report_ajax.php but 
+     * Basically a copy of redcap_v13.4.12/DataExport/report_ajax.php but
      * 1. replacing list ($report_table, $num_results_returned) = DataExport::doReport($_POST['report_id'], 'report', 'html',
      *    with $this->doExtendedReport()
      * 2. Not showing "Total number of records queried
-     * 
+     *
      * Return HTML content for ajax call to report_ajax.php
-     * Will include display content such as: 
+     * Will include display content such as:
      * - export/print buttons
      * - num records returned
      * - html table of results
@@ -118,14 +124,14 @@ class Report
         
         ## PERFORMANCE: Kill any currently running processes by the current user/session on THIS page
         \System::killConcurrentRequests(1);
-
+        
         // Get report info
         $report_id = $_POST['report_id'];
         if ($report_id != 'ALL' && $report_id != 'SELECTED') {
-            $report_id = intval($report_id); 
+            $report_id = intval($report_id);
         }
         $report = \DataExport::getReports($report_id);
-
+        
         // Checks for public reports
         if (\DataExport::isPublicReport()) {
             if (!defined('PROJECT_ID')) define('PROJECT_ID', \DataExport::getProjectIdFromReportId($report_id));
@@ -133,30 +139,73 @@ class Report
                 return;
             }
         }
-
+        
         $script_time_start = microtime(true);
+        
+        /**
+         * Beginning of code copied from DataExport/report_ajax.php to make the em compatible w rapid caching
+         */
+        
+        ## Rapid Retrieval: Cache salt
+        // Generate a form-level access salt for caching purposes: Create array of all forms represented by the report's fields
+        $reportAttr = \DataExport::getReports($report_id);
+        $reportFields = $reportAttr['fields'] ?? [];
+        $reportForms = [];
+        foreach ($reportFields as $thisField) {
+            $thisForm = $Proj->metadata[$thisField]['form_name'];
+            if (isset($reportForms[$thisForm])) continue;
+            $reportForms[$thisForm] = true;
+        }
+        $reportFormsAccess = array_intersect_key($user_rights['forms'], $reportForms);
+        // Use some user privileges and pagenum as additional salt for the cache
+        $cacheManager = CacheFactory::manager(PROJECT_ID);
+        $cacheOptions = [REDCapCache::OPTION_INVALIDATION_STRATEGIES => [ProjectActivityInvalidation::signature($project_id)]];
+        $cacheOptions[REDCapCache::OPTION_SALT] = [];
+        $cacheOptions[REDCapCache::OPTION_SALT][] = ['dag'=>$user_rights['group_id']];
+        if (isset($_GET['pagenum']) && isinteger($_GET['pagenum'])) {
+            $cacheOptions[REDCapCache::OPTION_SALT][] = ['pagenum'=>$_GET['pagenum']];
+        }
+        $reportFormsAccessSalt = [];
+        foreach ($reportFormsAccess as $thisForm=>$thisAccess) {
+            $reportFormsAccessSalt[] = "$thisForm:$thisAccess";
+        }
+        $cacheOptions[REDCapCache::OPTION_SALT][] = ['form-rights'=>implode(",", $reportFormsAccessSalt)];
+        // If the report has filter logic containing datediff() with today or now, then add more salt since these will cause different results with no data actually changing.
+        if (strpos($reportAttr['limiter_logic'], 'datediff') !== false) {
+            list ($ddWithToday, $ddWithNow) = containsDatediffWithTodayOrNow($reportAttr['limiter_logic']);
+            if ($ddWithNow) $cacheManager->setState(new DisabledState());  // disable the cache since will never be used
+            elseif ($ddWithToday) $cacheOptions[REDCapCache::OPTION_SALT][] = ['datediff'=>TODAY];
+        }
+        // If the report has filter logic containing a [user-X] smart variable, then add the USERID to the salt
+        if (strpos($reportAttr['limiter_logic'], '[user-') !== false) {
+            $cacheOptions[REDCapCache::OPTION_SALT][] = ['user'=>USERID];
+        }
+        
         
         // Build dynamic filter options (if any)
         $dynamic_filters = ''; // live filters not implemented for extended reports \DataExport::displayReportDynamicFilterOptions($_POST['report_id']);
         /*// Obtain any dynamic filters selected from query string params
-        list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
-        // Total number of records queried
-        $totalRecordsQueried = Records::getCountRecordEventPairs();
-        // For report A and B, the number of results returned will always be the same as total records queried
-        if ($_POST['report_id'] == 'ALL' || ($_POST['report_id'] == 'SELECTED' && (!isset($_GET['events']) || empty($_GET['events'])))) {
-            if ($user_rights['group_id'] == '') {
-                $num_results_returned = $totalRecordsQueried;
-            } else {
-                $num_results_returned = Records::getCountRecordEventPairs($user_rights['group_id']);
-            }
-        }*/
+         list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
+         // Total number of records queried
+         $totalRecordsQueried = Records::getCountRecordEventPairs();
+         // For report A and B, the number of results returned will always be the same as total records queried
+         if ($_POST['report_id'] == 'ALL' || ($_POST['report_id'] == 'SELECTED' && (!isset($_GET['events']) || empty($_GET['events'])))) {
+         if ($user_rights['group_id'] == '') {
+         $num_results_returned = $totalRecordsQueried;
+         } else {
+         $num_results_returned = Records::getCountRecordEventPairs($user_rights['group_id']);
+         }
+         }*/
         // Get html report table
         /*list ($report_table, $num_results_returned) = DataExport::doReport($_POST['report_id'], 'report', 'html', false, false, false, false,
-                                                        false, false, false, false, false, false, false,
-                                                        (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : array()),
-                                                        (isset($_GET['events']) ? explode(',', $_GET['events']) : array()),
-                                                        false, false, false, true, true, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);*/
-        list($report_table, $num_results_returned) = $this->doExtendedReport('html');
+         false, false, false, false, false, false, false,
+         (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : array()),
+         (isset($_GET['events']) ? explode(',', $_GET['events']) : array()),
+         false, false, false, true, true, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);*/
+        
+        //list($report_table, $num_results_returned) = $this->doExtendedReport('html');
+        
+        list ($report_table, $num_results_returned) = $cacheManager->getOrSet([new Report($this->project_id, $this->report_id, $this->module), 'doExtendedReport'], ['html'], $cacheOptions);
         
         if ($this->is_sql) {
             $enable_plotting = false; // no Stats & Charts option for sql report
@@ -189,6 +238,12 @@ class Report
         
         $downloadFilesBtnEnabled = ($user_rights['data_export_tool'] != '0' && \DataExport::reportHasFileUploadFields($report_id));
 
+        // Add JS var to note that we just stored the page in the cache
+        if (!$cacheManager->hasCacheMiss()) {
+            $cacheTime = CacheFactory::logger(PROJECT_ID)->getLastCacheTimeForProject(PROJECT_ID);
+            if ($cacheTime != '') print \RCView::hidden(['id'=>'redcap-cache-time', 'value'=>$cacheTime]);
+        }
+        
         // Display report and title and other text
         print  	"<div id='report_div' style='margin:0 0 20px;'>" .
 			\RCView::div(array('style'=>''),
