@@ -20,10 +20,10 @@ class Report
     protected const DEFAULT_DECIMAL_CHAR = '.';
     protected static $csvInjectionChars = array("-", "@", "+", "=");
     protected static $reportAttributeMap = array(
-        "rpt-is-sql"=>"is_sql",
-        "rpt-sql-disable-dag-filter"=>"sql_disable_dag_filter",
-        "rpt-sql"=>"sql_query",
-        "rpt-reshape-event"=>"reshape_event",
+        "rpt-is-sql"=>"is_sql", 
+        "rpt-sql-disable-dag-filter"=>"sql_disable_dag_filter", 
+        "rpt-sql"=>"sql_query", 
+        "rpt-reshape-event"=>"reshape_event", 
         "rpt-reshape-instance"=>"reshape_instance"
     );
     protected $project_id;
@@ -40,14 +40,14 @@ class Report
     public $is_reshaped = false;
     public $reshape_event = null;
     public $reshape_instance = null;
-    
+
     public function __construct($project_id, $report_id, ExtendedReports $module) {
         $this->report_id = $report_id;
         $this->module = $module;
         $this->setProjectId($project_id, $report_id);
         $this->readExtendedAttributes($this->report_id);
     }
-    
+
     protected function setProjectId($project_id, $report_id=null) {
         if (empty($project_id)) {
             // report id but no project id can happen e.g. on public report page
@@ -58,7 +58,7 @@ class Report
         }
         $this->project_id = intval($project_id);
     }
-    
+
     /**
      * readExtendedAttributes
      * Read any module settings for the specified report id
@@ -69,24 +69,24 @@ class Report
         $hasExtConfig = false;
         foreach($rptConfig as $rpt) {
             if ($rpt['report-id']==$report_id) {
-                $hasExtConfig = true; break;
+                $hasExtConfig = true; break; 
             }
         }
         if (!$hasExtConfig) return;
-        
+
         // guard against out-of-date config e.g. after project not longitudinal anymore
         global $Proj;
         $p = $Proj ?? new \Project($this->project_id);
-        
-        // return the report as having extended attributes if ANY rpt- attributes is not empty
+
+        // return the report as having extended attributes if ANY rpt- attributes is not empty 
         // (if all rpt- attrs are empty then not an extended report)
         foreach ($rpt as $attr => $val) {
             if (array_key_exists($attr, static::$reportAttributeMap) && !empty($val)) {
                 $this->is_extended = true;
                 $instanceVar = static::$reportAttributeMap[$attr];
                 switch ($attr) {
-                    case 'rpt-is-sql':
-                    case 'rpt-sql-disable-dag-filter':
+                    case 'rpt-is-sql': 
+                    case 'rpt-sql-disable-dag-filter': 
                         $val = (bool)$val;
                         break;
                     case 'rpt-sql':
@@ -105,58 +105,59 @@ class Report
             }
         }
     }
-    
+
     /**
      * viewReport()
-     * Basically a copy of redcap_v13.4.12/DataExport/report_ajax.php but
+     * Basically a copy of redcap_v13.4.12/DataExport/report_ajax.php but 
      * 1. replacing list ($report_table, $num_results_returned) = DataExport::doReport($_POST['report_id'], 'report', 'html',
      *    with $this->doExtendedReport()
      * 2. Not showing "Total number of records queried
-     *
+     * 
      * Return HTML content for ajax call to report_ajax.php
-     * Will include display content such as:
+     * Will include display content such as: 
      * - export/print buttons
      * - num records returned
      * - html table of results
      */
     public function viewReport() {
-        global $lang, $user_rights, $enable_plotting, $downloadFilesBtnEnabled;
+        global $Proj, $lang, $user_rights, $enable_plotting, $downloadFilesBtnEnabled;
         
+        $report_id = $_POST['report_id'];
+        if ($report_id == 'ALL' && $report_id == 'SELECTED') return;
+
         ## PERFORMANCE: Kill any currently running processes by the current user/session on THIS page
         \System::killConcurrentRequests(1);
-        
-        // Get report info
-        $report_id = $_POST['report_id'];
-        if ($report_id != 'ALL' && $report_id != 'SELECTED') {
-            $report_id = intval($report_id);
-        }
+
+        $report_id = intval($report_id); 
         $report = \DataExport::getReports($report_id);
-        
+        if (empty($this->report_attr)) $this->readReportAttr($_POST['report_id']);
+
         // Checks for public reports
-        if (\DataExport::isPublicReport()) {
-            if (!defined('PROJECT_ID')) define('PROJECT_ID', \DataExport::getProjectIdFromReportId($report_id));
+        $project_id = \DataExport::getProjectIdFromReportId($report_id);
+        $isPublicReport = \DataExport::isPublicReport();
+        if ($isPublicReport) {
+            if (!defined('PROJECT_ID')) define('PROJECT_ID', $project_id);
             if (!$this->canViewPublic($report)) {
                 return;
             }
         }
-        
+
         $script_time_start = microtime(true);
         
         /**
-         * Beginning of code copied from DataExport/report_ajax.php to make the em compatible w rapid caching
+         * Beginning of code essentially copied from DataExport/report_ajax.php to make the em compatible w rapid caching
          */
         
         ## Rapid Retrieval: Cache salt
         // Generate a form-level access salt for caching purposes: Create array of all forms represented by the report's fields
-        $reportAttr = \DataExport::getReports($report_id);
-        $reportFields = $reportAttr['fields'] ?? [];
+        if (empty($Proj)) $Proj = new \Project($project_id);
         $reportForms = [];
-        foreach ($reportFields as $thisField) {
+        foreach ($this->report_attr['fields'] as $thisField) {
             $thisForm = $Proj->metadata[$thisField]['form_name'];
             if (isset($reportForms[$thisForm])) continue;
             $reportForms[$thisForm] = true;
         }
-        $reportFormsAccess = array_intersect_key($user_rights['forms'], $reportForms);
+        $reportFormsAccess = ($isPublicReport) ? $reportForms : array_intersect_key($user_rights['forms'], $reportForms);
         // Use some user privileges and pagenum as additional salt for the cache
         $cacheManager = CacheFactory::manager(PROJECT_ID);
         $cacheOptions = [REDCapCache::OPTION_INVALIDATION_STRATEGIES => [ProjectActivityInvalidation::signature($project_id)]];
@@ -171,41 +172,38 @@ class Report
         }
         $cacheOptions[REDCapCache::OPTION_SALT][] = ['form-rights'=>implode(",", $reportFormsAccessSalt)];
         // If the report has filter logic containing datediff() with today or now, then add more salt since these will cause different results with no data actually changing.
-        if (strpos($reportAttr['limiter_logic'], 'datediff') !== false) {
-            list ($ddWithToday, $ddWithNow) = containsDatediffWithTodayOrNow($reportAttr['limiter_logic']);
+        if (strpos($this->report_attr['limiter_logic'], 'datediff') !== false) {
+            list ($ddWithToday, $ddWithNow) = containsDatediffWithTodayOrNow($this->report_attr['limiter_logic']);
             if ($ddWithNow) $cacheManager->setState(new DisabledState());  // disable the cache since will never be used
             elseif ($ddWithToday) $cacheOptions[REDCapCache::OPTION_SALT][] = ['datediff'=>TODAY];
         }
         // If the report has filter logic containing a [user-X] smart variable, then add the USERID to the salt
-        if (strpos($reportAttr['limiter_logic'], '[user-') !== false) {
+        if (strpos($this->report_attr['limiter_logic'], '[user-') !== false) {
             $cacheOptions[REDCapCache::OPTION_SALT][] = ['user'=>USERID];
         }
-        
-        
+
         // Build dynamic filter options (if any)
         $dynamic_filters = ''; // live filters not implemented for extended reports \DataExport::displayReportDynamicFilterOptions($_POST['report_id']);
         /*// Obtain any dynamic filters selected from query string params
-         list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
-         // Total number of records queried
-         $totalRecordsQueried = Records::getCountRecordEventPairs();
-         // For report A and B, the number of results returned will always be the same as total records queried
-         if ($_POST['report_id'] == 'ALL' || ($_POST['report_id'] == 'SELECTED' && (!isset($_GET['events']) || empty($_GET['events'])))) {
-         if ($user_rights['group_id'] == '') {
-         $num_results_returned = $totalRecordsQueried;
-         } else {
-         $num_results_returned = Records::getCountRecordEventPairs($user_rights['group_id']);
-         }
-         }*/
+        list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
+        // Total number of records queried
+        $totalRecordsQueried = Records::getCountRecordEventPairs();
+        // For report A and B, the number of results returned will always be the same as total records queried
+        if ($_POST['report_id'] == 'ALL' || ($_POST['report_id'] == 'SELECTED' && (!isset($_GET['events']) || empty($_GET['events'])))) {
+            if ($user_rights['group_id'] == '') {
+                $num_results_returned = $totalRecordsQueried;
+            } else {
+                $num_results_returned = Records::getCountRecordEventPairs($user_rights['group_id']);
+            }
+        }*/
         // Get html report table
         /*list ($report_table, $num_results_returned) = DataExport::doReport($_POST['report_id'], 'report', 'html', false, false, false, false,
-         false, false, false, false, false, false, false,
-         (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : array()),
-         (isset($_GET['events']) ? explode(',', $_GET['events']) : array()),
-         false, false, false, true, true, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);*/
-        
+                                                        false, false, false, false, false, false, false,
+                                                        (isset($_GET['instruments']) ? explode(',', $_GET['instruments']) : array()),
+                                                        (isset($_GET['events']) ? explode(',', $_GET['events']) : array()),
+                                                        false, false, false, true, true, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);*/
         //list($report_table, $num_results_returned) = $this->doExtendedReport('html');
-        
-        list ($report_table, $num_results_returned) = $cacheManager->getOrSet([new Report($this->project_id, $this->report_id, $this->module), 'doExtendedReport'], ['html'], $cacheOptions);
+        list ($report_table, $num_results_returned) = $cacheManager->getOrSet([$this, 'doExtendedReport'], ['html'], $cacheOptions);
         
         if ($this->is_sql) {
             $enable_plotting = false; // no Stats & Charts option for sql report
@@ -358,27 +356,23 @@ class Report
 
     protected function canViewPublic($report) {
         global $Proj, $lang, $secondary_pk, $custom_record_label;
-        $report_id = $report['report_id'] ?? intval($_GET['report_id']);
-//        \DataExport::checkReportHash($report_id);
-        $report = \DataExport::getReports($report_id);
         // Make sure user has access to this report if viewing inside a project
+        if (isset($report['report_id'])) {
+            $report_id = $report['report_id']; 
+        } else {
+            return false;
+        }
         $noAccess = false;
-        $type = '';
-        $errorMsg = '';
         if ($report['is_public'] != '1') {
             // If viewing a public report link that is no longer set as "public", return error message
-            $type = 'error';
             $noAccess = true;
-            $errorMsg = $lang['report_builder_184'];
         } else {
             $reports = \DataExport::getReports($report_id);
             // List of fields to verify if field is phi
             $fields = $reports['fields'];
             foreach ($fields as $field_name) {
                 if ($Proj->metadata[$field_name]['field_phi'] == '1') {
-                    $type = 'notice';
                     $noAccess = true;
-                    $errorMsg = $lang['report_builder_188'];
                     break;
                 }
             }
@@ -386,26 +380,18 @@ class Report
             if ($noAccess == false && in_array($Proj->table_pk, $fields) && trim($secondary_pk.$custom_record_label) != '') {
                 if ($Proj->metadata[$secondary_pk]['field_phi'] == '1') {
                     // Secondary Unique Field is an Identifier
-                    $type = 'notice';
                     $noAccess = true;
-                    $errorMsg = $lang['report_builder_217'];
                 } elseif (trim($custom_record_label) != '') {
                     // Get the variables in $custom_record_label and then check if any are Identifiers
                     $custom_record_label_fields = array_unique(array_keys(getBracketedFields($custom_record_label, true, true, true)));
                     foreach ($custom_record_label_fields as $field_name) {
                         if ($Proj->metadata[$field_name]['field_phi'] == '1') {
-                            $type = 'notice';
                             $noAccess = true;
-                            $errorMsg = $lang['report_builder_218'];
                             break;
                         }
                     }
                 }
             }
-        }
-	    // Display the error if necessary
-        if ($noAccess) {
-            print \RCView::div(array('class' => 'red my-5'), \RCView::b(($type == 'error') ? $lang['global_01'] : $lang['global_03'] . $lang['colon']) . " " . $errorMsg);
         }
         return !$noAccess;
     }
@@ -537,6 +523,14 @@ class Report
         print \json_encode_rc(array('title'=>$dialog_title, 'content'=>$dialog_content));
     }
     
+    public function readReportAttr($report_id) {
+        $sql = 'select r.*, group_concat(f.field_name order by f.field_order) as fields from redcap_reports r inner join redcap_reports_fields f on r.report_id=f.report_id where r.report_id=? ';
+        $q = $this->module->query($sql, [intval($report_id)]); 
+        $this->report_attr = $q->fetch_assoc();
+        $fields = explode(',',$this->report_attr['fields']);
+        $this->report_attr['fields'] = $fields;
+    }
+
     public function doExtendedReport($format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
         global $Proj;
         $Proj = $Proj ?? new \Project($this->project_id);
@@ -546,9 +540,7 @@ class Report
         $decimalCharacter = (empty($decimalCharacter)) ? \UIState::getUIStateValue('', 'export_dialog', 'decimalCharacter') : $decimalCharacter;
         $decimalCharacter = (empty($decimalCharacter)) ? static::DEFAULT_DECIMAL_CHAR : $decimalCharacter;
 
-        $sql = 'select * from redcap_reports where report_id=?';
-        $q = $this->module->query($sql, [intval($_POST['report_id'])]); 
-        $this->report_attr = $q->fetch_assoc();
+        if (empty($this->report_attr)) $this->readReportAttr($_POST['report_id']);
 
         $rows = array();
         if ($this->is_sql) {
