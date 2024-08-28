@@ -1543,9 +1543,11 @@ class Report
         return \REDCap::filterHtml($ontDisplay);
     }
 
-    protected function truncateLabel($label, $maxlen=50) {
+    protected function truncateLabel($label, $maxlen=100) {
         $maxlen = ($maxlen<21) ? 21 : $maxlen;
-        return (\strlen($label) > $maxlen) ? \substr($label, 0, $maxlen-20).'...'.\substr($label, -17, 17) : $label;
+        $display_label = \strip_tags(\label_decode($label));
+        if (\mb_strlen($display_label) > $maxlen) $display_label = \mb_substr($display_label, 0, $maxlen-20)." ... ".\mb_substr($display_label, -17, 17);
+        return $display_label;
     }
 
     /**
