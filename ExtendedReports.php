@@ -16,6 +16,7 @@ class ExtendedReports extends AbstractExternalModule
     protected const SQL_OPTION_TD1_HTML_ADMIN = '<input id="rpt-sql-check" type="checkbox" class="mb-1" /><div id="rpt-sql-block"><textarea name="rpt-sql" id="rpt-sql" class="x-form-field notesbox form-control" rows="5" style="font-size:12px;width:99%;"></textarea><div style="line-height:11px;"><div class="float-right"><a href="javascript:;" tabindex="-1" class="expandLink" id="rpt-sql-expand">Expand</a>&nbsp;&nbsp;</div><div class="float-left" style="color:#888;font-size:11px;line-height:12px;font-weight:normal;"><div class="font-weight-bold">Smart Variables</div><div class="pl-2">User-level and system-level smart variables may be utilised. Pay attention to the data type and quote strings as required.<br>E.g. <span style="font-family:monospace;">select [project-id] as pid, \\\'[user-name]\\\' as user;</span></div><div class="font-weight-bold">Data Access Groups</div><div class="pl-2">If your query returns a column named the same as the project\\\'s record id column then the rows will be filtered by the user\\\'s DAG (where applicable).<br>To avoid automatic DAG filtering you can:<ol><li>have your SQL return the column renamed to something else</li><li>tick this box to <strong>disable DAG filtering</strong> <input type=\"checkbox\" name=\"rpt-sql-disable-dag-filter\"></li></ol></div></div></div></div>';
     protected const SQL_OPTION_TD1_HTML_PLEB = '<span class="rpt-sql-pleb">MAG<i class="fas fa-magic rpt-sql-wiggle5" style="margin-right:-5px;"></i>C<sup><i class="far fa-star rpt-sql-wiggle5 ml-1" style="font-size:85%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:70%"></i><i class="far fa-star rpt-sql-wiggle5" style="font-size:50%"></sup></span>';
     protected const SQL_NEWLINE_REPLACEMENT = '|EXTRPT:NL|';
+    protected const TAG_REPORT_LABEL = '@REPORT-LABEL';
     protected $report_id = null;
 
     /**
@@ -23,6 +24,11 @@ class ExtendedReports extends AbstractExternalModule
      * Catch a report view or export and if there's some "extended" config apply the necessary tweaks.
      */
     public function redcap_every_page_before_render($project_id=null) {
+        if (str_contains(PAGE,'DataExport')) {
+            // Action tag: @REPORT-LABEL='?'
+            $this->replaceLabels();
+        }
+
         // $a = 'what does new report save look like?'; // report_edit_ajax.php $_GET report_id=0 &_POST: __TITLE__ description rpt-sql field(array) etc.
         // $b = 'what does existing report save look like?'; // report_edit_ajax.php $_GET: report_id &_POST: __TITLE__ description rpt-sql field(array) etc.
         // $c = 'what does viewing a report look like?'; // report_ajax.php $_GET: pagenum $_POST: report_id Return list ($report_table, $num_results_returned)
@@ -37,8 +43,9 @@ class ExtendedReports extends AbstractExternalModule
             PAGE=='api/index.php' && //API===true && 
             isset($_POST['report_id']) && isset($_POST['content']) && $_POST['content']==='report'
            ) {
+            $this->replaceLabels();
             $this->apiReportExport();
-            // $this->exitAfterHook(); when successfull
+            // $this->exitAfterHook(); when successful
             return;
         } 
         
@@ -663,5 +670,19 @@ class ExtendedReports extends AbstractExternalModule
 		}
 		// Return rights
 		return $rights;
+	}
+
+    /**
+     * replaceLabels()
+     * Fields with @REPORT-LABEL="?" get alternative field label in reports
+     */
+    protected function replaceLabels(): void {
+        global $Proj;
+        foreach ($Proj->metadata as $fldName => $fldAttr) {
+            if (str_contains($fldAttr['misc'],static::TAG_REPORT_LABEL)) {
+                $altLabel = \Form::getValueInQuotesActionTag($Proj->metadata[$fldName]['misc'], static::TAG_REPORT_LABEL);
+                $Proj->metadata[$fldName]['element_label'] = $altLabel;
+            }
+        }
 	}
 }

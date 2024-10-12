@@ -11,6 +11,12 @@
     ],
     "framework-version": 15,
     "enable-every-page-hooks-on-system-pages": true,
+    "action-tags": [
+        {
+            "tag": "@REPORT-LABEL",
+            "description": "Use <code>@REPORT-LABEL=\"Alternative field label text\"</code> to have reports and exports show some alternative text as the field's label<br>This could be useful to make long question labels more concise, remove piping placeholders, or disambiguate fields with matching labels."
+        }
+    ],
     "system-settings": [
         {
             "key": "override-curl-verify",

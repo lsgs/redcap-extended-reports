@@ -1479,7 +1479,7 @@ class Report
     }
 
     protected function makeChoiceDisplayHtml($val, $choices) {
-        if ($val == '') return '';
+        if (is_null($val) || $val == '') return '';
         if (array_key_exists($val, $choices)) {
             $rtn = '';
             switch ($this->report_attr['report_display_data']) {
