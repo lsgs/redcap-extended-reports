@@ -1647,43 +1647,74 @@ $report = REDCap::getReport('896', 'csv', true);
 			false, true, true
 		);
 
-        return self::applyDefaultSorting($reportData);
+        return self::applyDefaultSorting($report_id, $reportData);
 	}
 
-    protected static function applyDefaultSorting(&$reportData) {
-        return $reportData; // TODO
-        // APPLY MULTI-FIELD SORTING
-/*        if (($doSorting ?? false) && isset($sortFieldValues[0]) && is_array($sortFieldValues[0]))
-        {
-            // Sort the data array
-            if (count($sortFieldValues) == 1) {
-                // One sort field
-                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
-                                $record_data_formatted);
-            } elseif (count($sortFieldValues) == 2) {
-                // Two sort fields
-                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
-                                $sortFieldValues[1], ($sortTypes[1] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[1] ? SORT_NUMERIC : SORT_STRING),
-                                $record_data_formatted);
-            } else {
-                // Three sort fields
-                array_multisort($sortFieldValues[0], ($sortTypes[0] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[0] ? SORT_NUMERIC : SORT_STRING),
-                                $sortFieldValues[1], ($sortTypes[1] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[1] ? SORT_NUMERIC : SORT_STRING),
-                                $sortFieldValues[2], ($sortTypes[2] == 'ASC' ? SORT_ASC : SORT_DESC), ($sortFieldIsNumber[2] ? SORT_NUMERIC : SORT_STRING),
-                                $record_data_formatted);
+    protected static function applyDefaultSorting($report_id, $reportData) {
+        global $Proj;
+        $rpt = \DataExport::getReports($report_id);
+
+        // determine sort properties
+        $sortFields = array();
+        for ($i=1; $i<4; $i++) {
+            $fld = $rpt["orderby_field$i"];
+            if (!is_null($fld)){
+                $fldType = $Proj->metadata[$fld]['element_type'];
+                $fldValType = $Proj->metadata[$fld]['element_validation_type'];
+                $fldIsNum = ($fldType=='calc' || $fldType=='slider' || contains($fldValType,'number') || $fldValType=='integer' || $fldValType=='float');
+                $sortFields[$i-1] = $fld;
+                $sortTypes[$i-1] = ($rpt["orderby_sort$i"]=='DESC') ? SORT_DESC : SORT_ASC;
+                $sortFlags[$i-1] = ($fldIsNum) ? SORT_NUMERIC: SORT_STRING;
             }
-            // If any sorting fields did NOT exist in $fields originally (but were added so their data could be obtained for
-            // sorting purposes only), then remove them now.
-            if (!empty($sortArrayRemoveFromData)) {
-                foreach ($sortArrayRemoveFromData as $this_field) {
-                    foreach ($record_data_formatted as &$this_item) {
-                        // Remove field from this record-event
-                        unset($this_item[$this_field]);
-                    }
-                }
+        }
+
+        // make array with data for sorting
+        $sortData = array();
+        foreach ($reportData as $rec => $evtData) {
+            foreach ($sortFields as $sortField) {
+                $firstValue = static::findFirstNonBlankValueForKey($evtData, "$sortField");
+                $sortData["id=$rec"][$sortField] = $firstValue;
             }
-            // Remove vars to save memory
-            unset($sortFieldValues);
-        }*/
+        }
+        
+        // Sort the record ids
+        if (count($sortFields) == 1) {
+            $col0 = array_column($sortData, $sortFields[0]);
+            array_multisort($col0, $sortTypes[0], $sortFlags[0], $sortData);
+        } elseif (count($sortFields) == 2) {
+            $col0 = array_column($sortData, $sortFields[0]);
+            $col1 = array_column($sortData, $sortFields[1]);
+            array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $sortData);
+        } else {
+            $col0 = array_column($sortData, $sortFields[0]);
+            $col1 = array_column($sortData, $sortFields[1]);
+            $col2 = array_column($sortData, $sortFields[2]);
+            array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $col2, $sortTypes[2], $sortFlags[2], $sortData);
+        }
+
+        // apply sorting to data array
+        $sortedReportData = array();
+        foreach (array_keys($sortData) as $rec) {
+            $recId = substr($rec,3); // strip the "id=" used to preserve keys in multisort"
+            $sortedReportData[$recId] = $reportData[$recId];
+            unset($reportData[$recId]);
+        }
+        
+        return $sortedReportData;
+    }
+
+    protected static function findFirstNonBlankValueForKey(array $array, string $searchKey): string {
+        $firstMatch = '';
+        foreach ($array as $key => $value) {
+            if (is_array($value)) {
+                $firstMatch = static::findFirstNonBlankValueForKey($value, $searchKey);
+            } else if ($key==$searchKey) {
+                $firstMatch = $value;
+            }
+            if ($firstMatch!='') {
+                break;
+            } 
+        }
+        return "$firstMatch";
     }
 }
