@@ -1479,7 +1479,7 @@ class Report
     }
 
     protected function makeChoiceDisplayHtml($val, $choices) {
-        if (is_null($val) || $val == '') return '';
+        if (is_null($val) || is_array($val) || $val == '') return ''; // can be array when reshaped report has no data for repeating field https://github.com/lsgs/redcap-extended-reports/issues/32
         if (array_key_exists($val, $choices)) {
             $rtn = '';
             switch ($this->report_attr['report_display_data']) {
