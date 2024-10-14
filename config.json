@@ -1,6 +1,6 @@
 {
     "name": "Extended Reports",
-    "description": "Extensions to REDCap's built in Data Exports & Reports functionality:<ul><li>Reshape row-per-record: collapse multiple events and/or instances for records to record-level rows</li><li>Reports using SQL queries (administrators only)</li></ul>Reshaped and SQL reports may be viewed in the browser or downloaded in CSV format, including via the API \"report\" method.",
+    "description": "Extensions to REDCap's built in Data Exports & Reports functionality:<ul><li>Reshape row-per-record: collapse multiple events and/or instances for records to record-level rows</li><li>Reports using SQL queries (administrators only)</li><li>Adds live filter options for \"All Data\" report on report list page</li><li>Action tag <code>@REPORT-LABEL='...'</code> for specifying alternative field label for reports and exports</li></ul>Reshaped and SQL reports may be viewed in the browser or downloaded in CSV format, including via the API \"report\" method.",
     "namespace": "MCRI\\ExtendedReports",
     "authors": [
         {

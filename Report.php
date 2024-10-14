@@ -513,7 +513,7 @@ class Report
         }
         if ($data_edoc_id === false) {
             if (empty(trim($dialog_content))) {
-                $dialog_content = "<p style='color:red'>The raw data for this export could not be downloaded, therefore it could not be reshaped.</p><p>This problem can be caused by a server configuration issue. Ask your administrator to review the system-level settings for the \"Extended Reports\" external module.";
+                $dialog_content = "<p style='color:red'>The raw data for this export could not be downloaded, therefore it could not be reshaped.</p><p>This problem can be caused by a server configuration issue. Ask your administrator to select the option relating to \"internal certificate verification\" in the system-level settings for the \"Extended Reports\" external module.";
             } else {
                 $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
             }

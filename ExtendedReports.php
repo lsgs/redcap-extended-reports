@@ -118,6 +118,24 @@ class ExtendedReports extends AbstractExternalModule
             // viewing report
 
         } else {
+            // live filters for 'ALL' report
+            $lfAll = \DataExport::displayReportDynamicFilterOptions('ALL');
+            echo "<div id='rpta-live-filters' style='display:none;'>$lfAll</div>";
+            ?>
+            <script type='text/javascript'>
+                $(document).ready(function(){
+                    let rptaLF = $('#rpta-live-filters');
+                    $(rptaLF).find('span:first').append('<br>');
+                    $(rptaLF).find('select').removeAttr('onchange').on('change', function(){
+                        let lfId = $(this).attr('id');
+                        let lfVal = $(this).val();
+                        window.location.href = app_path_webroot+'DataExport/index.php?pid='+pid+'&report_id=ALL&pagenum=1&'+lfId+'='+lfVal;
+                    });
+                    $(rptaLF).insertAfter('span.rprt_btns:first').show();
+                });
+            </script>
+            <?php
+
             // report list page - tweak buttons for export/stats
             $rptConfig = $this->getSubSettings('report-config');
             $extendedReports = array();

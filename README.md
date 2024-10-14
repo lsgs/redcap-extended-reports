@@ -10,6 +10,8 @@ Luke Stevens, Murdoch Children's Research Institute https://www.mcri.edu.au
 Provides some extensions & additional functionality for REDCap's built-in Data Exports & Reports functionality.
 - Row per record output for reports with longitudinal data or data from repeating instruments.
 - Custom SQL report view and CSV export (including via API). Administrator-only set up.
+- Adds live filter options for "All Data" report (A) on My Reports & Exports (report list) page
+- Action tag `@REPORT-LABEL='...'` for specifying alternative field label for reports and exports
 
 ********************************************************************************
 ## Row-Per-Record Reshaping
