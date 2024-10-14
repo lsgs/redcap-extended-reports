@@ -129,7 +129,7 @@ class ExtendedReports extends AbstractExternalModule
                     $(rptaLF).find('select').removeAttr('onchange').on('change', function(){
                         let lfId = $(this).attr('id');
                         let lfVal = $(this).val();
-                        window.location.href = app_path_webroot+'DataExport/index.php?pid='+pid+'&report_id=ALL&pagenum=1&'+lfId+'='+lfVal;
+                        window.location.href = app_path_webroot+'DataExport/index.php?pid='+pid+'&report_id=ALL&pagenum=1&'+lfId+'='+encodeURIComponent(lfVal);
                     });
                     $(rptaLF).insertAfter('span.rprt_btns:first').show();
                 });
