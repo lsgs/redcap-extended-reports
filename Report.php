@@ -1661,43 +1661,62 @@ $report = REDCap::getReport('896', 'csv', true);
             if (!is_null($fld)){
                 $fldType = $Proj->metadata[$fld]['element_type'];
                 $fldValType = $Proj->metadata[$fld]['element_validation_type'];
-                $fldIsNum = ($fldType=='calc' || $fldType=='slider' || contains($fldValType,'number') || $fldValType=='integer' || $fldValType=='float');
+                $fldIsNum = (
+                             ($fld==$Proj->table_pk && $Proj->project['auto_inc_set']=='1') ||
+                             $fldType=='calc' || $fldType=='slider' || 
+                             contains($fldValType,'number') || $fldValType=='integer' || $fldValType=='float'
+                            );
                 $sortFields[$i-1] = $fld;
-                $sortTypes[$i-1] = ($rpt["orderby_sort$i"]=='DESC') ? SORT_DESC : SORT_ASC;
-                $sortFlags[$i-1] = ($fldIsNum) ? SORT_NUMERIC: SORT_STRING;
+                $sortTypes[$i-1] = ($rpt["orderby_sort$i"]=='DESC') ? \SORT_DESC : \SORT_ASC;
+                $sortFlags[$i-1] = ($fldIsNum) ? \SORT_NUMERIC: \SORT_STRING;
             }
         }
 
         // make array with data for sorting
         $sortData = array();
+        $i = 0;
         foreach ($reportData as $rec => $evtData) {
             foreach ($sortFields as $sortField) {
                 $firstValue = static::findFirstNonBlankValueForKey($evtData, "$sortField");
-                $sortData["id=$rec"][$sortField] = $firstValue;
+                if ($sortField==$Proj->table_pk && $Proj->project['auto_inc_set']=='1' && contains($firstValue,'-')) {
+                    // for dag-autonumbering, convert the dagid-int form into a sortable integer, e.g. 12345-123 -> 123450000000000123
+                    list($dagId,$recPart) = explode('-',$firstValue,2);
+                    $intMax = \PHP_INT_MAX;
+                    $dagRecToInt = intval(str_pad($dagId, strlen("$intMax")-1, '0', \STR_PAD_RIGHT)) + intval($recPart);
+                    $sortData[$i][$sortField] = $dagRecToInt;
+                } else {
+                    $sortData[$i][$sortField] = $firstValue;
+                }
             }
+            $sortData[$i]['real-record-id'] = $rec;
+            $i++;
         }
         
-        // Sort the record ids
-        if (count($sortFields) == 1) {
-            $col0 = array_column($sortData, $sortFields[0]);
-            array_multisort($col0, $sortTypes[0], $sortFlags[0], $sortData);
-        } elseif (count($sortFields) == 2) {
-            $col0 = array_column($sortData, $sortFields[0]);
-            $col1 = array_column($sortData, $sortFields[1]);
-            array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $sortData);
-        } else {
-            $col0 = array_column($sortData, $sortFields[0]);
-            $col1 = array_column($sortData, $sortFields[1]);
-            $col2 = array_column($sortData, $sortFields[2]);
-            array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $col2, $sortTypes[2], $sortFlags[2], $sortData);
-        }
+        // Sort the record ids 
+        try {
+            if (count($sortFields) == 1) {
+                $col0 = array_column($sortData, $sortFields[0]);
+                array_multisort($col0, $sortTypes[0], $sortFlags[0], $sortData);
+            } elseif (count($sortFields) == 2) {
+                $col0 = array_column($sortData, $sortFields[0]);
+                $col1 = array_column($sortData, $sortFields[1]);
+                array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $sortData);
+            } else {
+                $col0 = array_column($sortData, $sortFields[0]);
+                $col1 = array_column($sortData, $sortFields[1]);
+                $col2 = array_column($sortData, $sortFields[2]);
+                array_multisort($col0, $sortTypes[0], $sortFlags[0], $col1, $sortTypes[1], $sortFlags[1], $col2, $sortTypes[2], $sortFlags[2], $sortData);
+            }
 
-        // apply sorting to data array
-        $sortedReportData = array();
-        foreach (array_keys($sortData) as $rec) {
-            $recId = substr($rec,3); // strip the "id=" used to preserve keys in multisort"
-            $sortedReportData[$recId] = $reportData[$recId];
-            unset($reportData[$recId]);
+            // apply sorting to data array
+            $sortedReportData = array();
+            foreach ($sortData as $sortedRecord) {
+                $recId = $sortedRecord['real-record-id'];
+                $sortedReportData[$recId] = $reportData[$recId];
+                unset($reportData[$recId]);
+            }
+        } catch (\Throwable $th) {
+            return $reportData; // just return unsorted if sorting fails
         }
         
         return $sortedReportData;
