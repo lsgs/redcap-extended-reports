@@ -1682,8 +1682,13 @@ $report = REDCap::getReport('896', 'csv', true);
                     // for dag-autonumbering, convert the dagid-int form into a sortable integer, e.g. 12345-123 -> 123450000000000123
                     list($dagId,$recPart) = explode('-',$firstValue,2);
                     $intMax = \PHP_INT_MAX;
-                    $dagRecToInt = intval(str_pad($dagId, strlen("$intMax")-1, '0', \STR_PAD_RIGHT)) + intval($recPart);
-                    $sortData[$i][$sortField] = $dagRecToInt;
+                    $dagPart = str_pad($dagId, strlen("$intMax")-1, '0', \STR_PAD_RIGHT);
+                    if (is_numeric($dagPart) && is_numeric($recPart)) {
+                        $dagRecSortId = intval($dagPart) + intval($recPart);
+                    } else {
+                        $dagRecSortId = substr($dagPart,0,-1*strlen($recPart))."$recPart"; // unlikely but could happen if record manually renamed or AutoNumber EM
+                    }
+                    $sortData[$i][$sortField] = $dagRecSortId;
                 } else {
                     $sortData[$i][$sortField] = $firstValue;
                 }
