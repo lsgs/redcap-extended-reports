@@ -599,6 +599,7 @@ class ExtendedReports extends AbstractExternalModule
         $result = \http_post($url, $params);
         if (is_null($result)) return; // error with call (e.g. permissions) - let it proceed and fail again for the user in the usual way
         $resultArray = \json_decode($result, true);
+        if (!is_array($resultArray)) return; // error with call (e.g. badly formed result) - let it proceed and fail again for the user in the usual way
         if (array_key_exists('error', $resultArray)) return; // error with call (e.g. permissions) - let it proceed and fail again for the user in the usual way
 
         // set project context

@@ -11,6 +11,7 @@
     ],
     "framework-version": 15,
     "enable-every-page-hooks-on-system-pages": true,
+    "enable-every-page-hooks-on-login-form": true,
     "action-tags": [
         {
             "tag": "@REPORT-LABEL",
