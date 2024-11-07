@@ -975,9 +975,9 @@ class Report
                                         } else {
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
-                                                $thisRecValue = (float)$thisRecValue;
+//                                                $thisRecValue = (float)$thisRecValue;
                                             }
-                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
                                         }
                                         break;
                                     case 'max':
@@ -986,9 +986,9 @@ class Report
                                         } else {
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
-                                                $thisRecValue = (float)$thisRecValue;
+//                                                $thisRecValue = (float)$thisRecValue;
                                             }
-                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
                                         }
                                         break;
                                     case 'conc_space':
