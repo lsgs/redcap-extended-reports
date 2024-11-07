@@ -69,4 +69,12 @@ SQL reports are exported only in CSV format via the Data Exports Reports & Stats
 
 ### Permissions 
 SQL reports can be created and have their SQL edited only by REDCap administrators. Report title, description and visibility are editable by regular users in the usual way.
+
+********************************************************************************
+## Limitations
+
+1. Reshaping is not applied to stats package exports (R, Stata, SAS and SPSS all have built-in commands for the reshaping operation). Stats package exports are performed with no modification.
+2. SQL reports exports are limited to CSV raw/label formats only, not with stats package syntax files, nor as ODM XML.
+3. The custom report processing is not able to be injected when a report is run for the purpose of a smart variable parameter, e.g. `[aggregate-count:record_id:R-123ABCDEFG]`. Consequently rows returned will be in a report's unreshaped form, and will be empty for SQL reports.
+
 ********************************************************************************

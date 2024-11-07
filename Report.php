@@ -975,7 +975,6 @@ class Report
                                         } else {
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
-//                                                $thisRecValue = (float)$thisRecValue;
                                             }
                                             $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
                                         }
@@ -986,7 +985,6 @@ class Report
                                         } else {
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
-//                                                $thisRecValue = (float)$thisRecValue;
                                             }
                                             $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
                                         }
@@ -1129,7 +1127,19 @@ class Report
                     $title = $fldLabel;  // instances only, no events
                 }
             }
-            if ($this->report_attr['report_display_header']!=='LABEL') $title .= "<div class=\"rpthdr\">$fldName</div>";
+            if ($this->report_attr['report_display_header']!=='LABEL') {
+                $rpthdr = $fldName;
+                if ($th['is_repeating_event'] || $th['is_repeating_form']) {
+                    switch ($this->reshape_instance) {
+                        case 'first': $rpthdr .= ' (first)'; break;
+                        case 'last':  $rpthdr .= ' (last)'; break;
+                        case 'min':   $rpthdr .= ' (min)'; break;
+                        case 'max':   $rpthdr .= ' (max)'; break;
+                        default: break;
+                    }
+                }
+                $title .= "<div class=\"rpthdr\">$rpthdr</div>";
+            }
             if ($this->reshape_instance=='cols' && ($th['is_repeating_event'] || $th['is_repeating_form'])) {
                 if (count($th['subvalues']) == 0) {
                     $colspan = " colspan=".$th['instance_count'];
