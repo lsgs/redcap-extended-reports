@@ -976,7 +976,10 @@ class Report
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
                                             }
-                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
+                                            if (is_numeric($thisRecValue)) {
+                                                $thisRecValue = (float)$thisRecValue;
+                                            }
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue < $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
                                         break;
                                     case 'max':
@@ -986,7 +989,10 @@ class Report
                                             if (is_numeric($thisInstanceValue)) {
                                                 $thisInstanceValue = (float)$thisInstanceValue;
                                             }
-                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : (float)$thisRecValue;
+                                            if (is_numeric($thisRecValue)) {
+                                                $thisRecValue = (float)$thisRecValue;
+                                            }
+                                            $thisRecValue = ($thisRecValue==='' || $thisInstanceValue > $thisRecValue) ? $thisInstanceValue : $thisRecValue;
                                         }
                                         break;
                                     case 'conc_space':
