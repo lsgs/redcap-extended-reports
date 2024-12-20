@@ -83,6 +83,11 @@
                         { "value": "conc_comma", "name": "Concatenate with comma" },
                         { "value": "conc_pipe", "name": "Concatenate with pipe" }
                     ]
+                },
+                {
+                    "key": "rpt-disable-rapid-retrieval",
+                    "name": "Disable rapid retrieval?<br><span class=\"text-muted\">Can be useful for SQL reports e.g. where reading data from other projects that may have changed since the report was cached in this project.</span>",
+                    "type": "checkbox"
                 }
             ]
         }

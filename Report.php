@@ -24,7 +24,8 @@ class Report
         "rpt-sql-disable-dag-filter"=>"sql_disable_dag_filter", 
         "rpt-sql"=>"sql_query", 
         "rpt-reshape-event"=>"reshape_event", 
-        "rpt-reshape-instance"=>"reshape_instance"
+        "rpt-reshape-instance"=>"reshape_instance",
+        "rpt-disable-rapid-retrieval"=>"disable_rapid_retrieval"
     );
     protected $project_id;
     public $report_id;
@@ -40,6 +41,7 @@ class Report
     public $is_reshaped = false;
     public $reshape_event = null;
     public $reshape_instance = null;
+    public $disable_rapid_retrieval = false;
 
     public function __construct($project_id, $report_id, ExtendedReports $module) {
         $this->report_id = $report_id;
@@ -97,6 +99,9 @@ class Report
                         break;
                     case 'rpt-reshape-instance':
                         if (!$p->hasRepeatingFormsEvents() && !empty($val)) $val = '';
+                        break;
+                    case 'rpt-disable-rapid-retrieval':
+                        $val = (bool)$val;
                         break;
                     default:
                         break;
@@ -181,7 +186,10 @@ class Report
         if (strpos($this->report_attr['limiter_logic'], '[user-') !== false) {
             $cacheOptions[REDCapCache::OPTION_SALT][] = ['user'=>USERID];
         }
-
+        // If report set to skip rapid retrieval, then add timestamp to the salt so won't be reused
+        if ($this->disable_rapid_retrieval) {
+            $cacheOptions[REDCapCache::OPTION_SALT][] = ['timestamp'=>NOW];
+        }
         // Build dynamic filter options (if any)
         $dynamic_filters = ''; // live filters not implemented for extended reports \DataExport::displayReportDynamicFilterOptions($_POST['report_id']);
         /*// Obtain any dynamic filters selected from query string params
@@ -843,7 +851,7 @@ class Report
                     ) {
                         $thisRecMaxInstance = intval(array_key_last($thisRec['repeat_instances'][$thisHdr['event_id']][$instrumentKey]));
                     } else {
-                        $thisRecMaxInstance = 0;
+                        $thisRecMaxInstance = 1; // placeholder for instance if none yet created
                     }
                     $fieldMaxInstance = ($thisRecMaxInstance > $fieldMaxInstance) ? $thisRecMaxInstance : $fieldMaxInstance;
                 }
@@ -1154,6 +1162,8 @@ class Report
             // If user does not have form-level access to this field's form
             if ($fldName != $Proj->table_pk && $user_rights['forms'][$Proj->metadata[$fldName]['form_name']] == '0') {
                 $noAccess = 'class="form_noaccess"';
+            } else {
+                $noAccess = '';
             }
         }
         return "<th $colspan $rowspan $noAccess><div class=\"mr-3\">$title</div></th>";;
@@ -1271,7 +1281,7 @@ class Report
             if ($ontologyOption!=='' && preg_match('/^\w+:\w+$/', $ontologyOption)) {
                 // ontology fields are text fields with an element enum like "BIOPORTAL:ICD10"
                 list($ontologyService, $ontologyCategory) = explode(':',$ontologyOption,2);
-                $outValue = $this->makeOntologyDisplay($value, $ontologyService, $ontologyCategory);
+                $outValue = $this->makeOntologyDisplay($value, $ontologyService, $ontologyCategory, $outputFormat);
             } else {
                 // regular text fields have null element_enum
                 $outValue = $this->makeTextDisplay($value, $fieldName, $field['element_validation_type'], $outputFormat, $decimalCharacter);
@@ -1542,15 +1552,33 @@ class Report
         return $val;
     }
 
-    protected function makeOntologyDisplay($val, $service, $category) {
+    protected function makeOntologyDisplay($val, $service, $category, $format) {
+        if (trim($val)=='') return '';
+        
         $sql = "select label from redcap_web_service_cache where project_id=? and service=? and category=? and `value`=?";
         $q = $this->module->query($sql, [PROJECT_ID, $service, $category, $val]);
         $r = db_fetch_assoc($q);
-        $cachedLabel = $r["label"];
-        $ontDisplay = (is_null($cachedLabel) || $cachedLabel==='')
-                ? $val
-                : $cachedLabel.' <span class="text-muted">('.$val.')</span>';
-        return \REDCap::filterHtml($ontDisplay);
+        $cachedLabel = $r["label"] ?? '';
+
+        switch ($format){
+            case 'html': // return single value: labels and values of selected option
+                switch ($this->report_attr['report_display_data']) {
+                    case 'LABEL': $outValue = ($cachedLabel==='') ? $val : $$cachedLabel; break;
+                    case 'RAW': $outValue = $val; break;
+                    default: $outValue = $cachedLabel.' <span class="text-muted">('.$val.')</span>'; // BOTH
+                }
+                break;
+            case 'csv':
+            case 'csvraw':
+                $outValue = $val; // return single value: comma-separated values of selected choices
+                break;
+            case 'csvlabels':
+                $outValue = $cachedLabel; // return single value: comma-separated labels of selected choices
+                break;
+            default:
+                break;
+        }
+        return \REDCap::filterHtml($outValue);
     }
 
     protected function truncateLabel($label, $maxlen=100) {
