@@ -512,18 +512,24 @@ class Report
 
             $data_edoc_id = \DataExport::storeExportFile($csv_filename, trim($data_content), true, false);
 
-            // replace original doc id for download/sendit links with new doc id
-            $dialog_content = str_replace("&amp;id=$doc_id","&amp;id=$data_edoc_id",$dialog_content);
-            $dialog_content = str_replace("displaySendItExportFile($doc_id);","displaySendItExportFile($data_edoc_id);",$dialog_content);
-            \REDCap::logEvent('External Module: Extended Reports',"Extended properties applied to report output doc_id=$doc_id: new doc_id=$data_edoc_id");
+            if ($data_edoc_id>0) {
+                // replace original doc id for download/sendit links with new doc id
+                $dialog_content = str_replace("&amp;id=$doc_id","&amp;id=$data_edoc_id",$dialog_content);
+                $dialog_content = str_replace("displaySendItExportFile($doc_id);","displaySendItExportFile($data_edoc_id);",$dialog_content);
+                \REDCap::logEvent('External Module: Extended Reports',"Extended properties applied to report output doc_id=$doc_id: new doc_id=$data_edoc_id");
+            } else {
+                $data_edoc_id = false;
+            }
         } else {
             $data_edoc_id = false;
         }
         if ($data_edoc_id === false) {
             if (empty(trim($dialog_content))) {
                 $dialog_content = "<p style='color:red'>The raw data for this export could not be downloaded, therefore it could not be reshaped.</p><p>This problem can be caused by a server configuration issue. Ask your administrator to select the option relating to \"internal certificate verification\" in the system-level settings for the \"Extended Reports\" external module.";
-            } else {
+            } else if ($match) {
                 $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
+            } else {
+                $dialog_content = "<p style='color:red'>An error occurred when exporting this report internally in its standard form, prior to applying the extended proprties.</p>".$dialog_content;
             }
         }
 
@@ -575,7 +581,7 @@ class Report
             if ($num_results_returned === 0) {
                 $report_table='<table id="report_table" class="dataTable cell-border" style="table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;"><thead><tr></tr></thead><tbody><tr class="odd"><td style="color:#777;border:1px solid #ccc;padding:10px 15px !important;" colspan="0">No results were returned</td></tr></tbody></table>';
             } else {
-                $numThRows = ($hasSplitCbOrInstances && $this->report_attr['report_display_header']!=='VARIABLE') ? 2 : 1;
+                $numThRows = ($hasSplitCbOrInstances /*&& $this->report_attr['report_display_header']!=='VARIABLE'*/) ? 2 : 1;
                 $report_table = "<table id='report_table' class='dataTable cell-border' style='table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;'>";
                 $table_header = "<thead>";
                 for ($headerRow=1; $headerRow<=$numThRows; $headerRow++) {
@@ -1108,6 +1114,7 @@ class Report
     protected function makeReportColTitle($th, $numThRows, $raw=false) {
         global $Proj, $user_rights;
         $fldName = \REDCap::filterHtml((is_array($th))?$th['field_name']:(string)$th);
+        $inst = '';
 
         if ($raw) {
             $title = $fldName;
@@ -1141,18 +1148,21 @@ class Report
                     $title = $fldLabel;  // instances only, no events
                 }
             }
-            if ($this->report_attr['report_display_header']!=='LABEL') {
-                $rpthdr = $fldName;
-                if ($th['is_repeating_event'] || $th['is_repeating_form']) {
-                    switch ($this->reshape_instance) {
-                        case 'first': $rpthdr .= ' (first)'; break;
-                        case 'last':  $rpthdr .= ' (last)'; break;
-                        case 'min':   $rpthdr .= ' (min)'; break;
-                        case 'max':   $rpthdr .= ' (max)'; break;
-                        default: break;
-                    }
+            if ($th['is_repeating_event'] || $th['is_repeating_form']) {
+                switch ($this->reshape_instance) {
+                    case 'first': $inst .= '(first)'; break;
+                    case 'last':  $inst .= '(last)'; break;
+                    case 'min':   $inst .= '(min)'; break;
+                    case 'max':   $inst .= '(max)'; break;
+                    default: $inst = ''; break;
                 }
-                $title .= "<div class=\"rpthdr\">$rpthdr</div>";
+            }
+            switch ($this->report_attr['report_display_header']) {
+                case 'VARIABLE':
+                case 'LABEL': 
+                    $title .= " $inst"; break;
+                default:
+                    $title .= "<div class=\"rpthdr\">$fldName $inst</div>"; break;
             }
             if ($this->reshape_instance=='cols' && ($th['is_repeating_event'] || $th['is_repeating_form'])) {
                 if (count($th['subvalues']) == 0) {
@@ -1242,8 +1252,14 @@ class Report
         $headers = '';
         $choices = \parseEnum($Proj->metadata[$th['field_name']]['element_enum']);
         foreach ($th['subvalues'] as $thsv) {
-            $title = $this->truncateLabel($choices[$thsv]);
-            if ($this->report_attr['report_display_header']!=='LABEL') $title .= "<div class=\"rpthdr\">".$th['field_name']."___$thsv</div>";
+            switch ($this->report_attr['report_display_header']) {
+                case 'VARIABLE':
+                    $title = "<div class=\"rpthdr\">".$th['field_name']."___$thsv</div>"; break;
+                case 'LABEL': 
+                    $title = $this->truncateLabel($choices[$thsv]); break;
+                default: // BOTH
+                    $title = $this->truncateLabel($choices[$thsv]) . "<div class=\"rpthdr\">".$th['field_name']."___$thsv</div>"; break;
+            }
             $headers .= $this->makeReportColTitle("$inst $title", 2, true);
         }
         return $headers;
