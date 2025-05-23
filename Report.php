@@ -645,7 +645,7 @@ class Report
                             }
                         }
                     }
-                    $return_content = rtrim($return_content, $csvDelimiter).static::DEFAULT_CSV_LINE_END;
+                    $return_content = substr($return_content, 0, -1).static::DEFAULT_CSV_LINE_END; // rtrim($return_content, $csvDelimiter).static::DEFAULT_CSV_LINE_END; don't do rtrim because it removes ALL trailing delimiters, not just the last
                 }
             }
 
