@@ -461,10 +461,8 @@ class Report
         curl_setopt($curlpost, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($curlpost, CURLOPT_CUSTOMREQUEST, "POST");
         curl_setopt($curlpost, CURLOPT_POSTFIELDS, $param_string);
-        if (!sameHostUrl($url)) {
-            curl_setopt($curlpost, CURLOPT_PROXY, PROXY_HOSTNAME); // If using a proxy
-            curl_setopt($curlpost, CURLOPT_PROXYUSERPWD, PROXY_USERNAME_PASSWORD); // If using a proxy
-        }
+        if (defined("PROXY_HOSTNAME") && !empty(PROXY_HOSTNAME)) curl_setopt($curlpost, CURLOPT_PROXY, PROXY_HOSTNAME); // If using a proxy
+        if (defined("PROXY_USERNAME_PASSWORD") && !empty(PROXY_USERNAME_PASSWORD)) curl_setopt($curlpost, CURLOPT_PROXYUSERPWD, PROXY_USERNAME_PASSWORD); // If using a proxy
         curl_setopt($curlpost, CURLOPT_FRESH_CONNECT, 1); // Don't use a cached version of the url
         if (is_numeric($timeout)) {
             curl_setopt($curlpost, CURLOPT_CONNECTTIMEOUT, $timeout); // Set timeout time in seconds
@@ -726,7 +724,7 @@ class Report
             foreach ($finfo as $f) {
                 list($fName, $fLabel) = explode('$',$f->name,2);
                 if ($fName==$Proj->table_pk) $includesPk = true;
-                if (array_key_exists($fName, $Proj->metadata) && is_null($fLabel)) {
+                if (!isset($fLabel) && array_key_exists($fName, $Proj->metadata) && is_null($fLabel)) {
                     $fLabel = $this->truncateLabel($Proj->metadata[$fName]['element_label']);
                 }
                 $headers[] = array(
@@ -881,7 +879,7 @@ class Report
         if (count($report_data)>0 && $this->report_attr['output_dags']) { // find the position of the DAG col
             $eId = key($report_data[key($report_data)]);
             $row1Data = (is_numeric($eId)) ? $report_data[key($report_data)][$eId] : $eId;
-            $dagPos = array_search('redcap_data_access_group', array_keys($row1Data));
+            $dagPos = (array_key_exists('redcap_data_access_group', $row1Data)) ? array_search('redcap_data_access_group', array_keys($row1Data)) : false;
             if ($dagPos !== false) {
                 $dagHeader = array(
                     'report_id' => $this->report_id,
@@ -1192,7 +1190,8 @@ class Report
         if ($this->is_sql) {
             $evt = '';
             $sep = '';
-            $th['element_label'] = strip_tags($th['element_label']) ?? $th['field_name'];
+            $th['element_label'] = $th['element_label'] ?? $th['field_name'];
+            $th['element_label'] = strip_tags($th['element_label']);
         } else if ($format=='csvlabels') {
             $evt = ($Proj->multiple_arms) ? strip_tags($th['descrip'].' '.$th['arm_name']) : strip_tags($th['descrip']);
             $sep = ' ';
@@ -1585,7 +1584,7 @@ class Report
         switch ($format){
             case 'html': // return single value: labels and values of selected option
                 switch ($this->report_attr['report_display_data']) {
-                    case 'LABEL': $outValue = ($cachedLabel==='') ? $val : $$cachedLabel; break;
+                    case 'LABEL': $outValue = ($cachedLabel==='') ? $val : $cachedLabel; break;
                     case 'RAW': $outValue = $val; break;
                     default: $outValue = $cachedLabel.' <span class="text-muted">('.$val.')</span>'; // BOTH
                 }
