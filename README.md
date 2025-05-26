@@ -50,6 +50,11 @@ Row-per-record reshaping is **not** applied to stats package (SAS, SPSS, R, Stat
 ### "Longitudinal Reports" Plugin
 The functionality of this external module differs in some respects from the old (pre-external module framework) "[https://github.com/lsgs/redcap-longitudinal-reports/](Longitudinal Reports)" plugin. For example, this module does not allow you full control of the order of fields, or include schedule dates or survey links as selectable options (you can create fields for these using smart variables if you need them in reports), whereas the old plugin does not integrate fully with REDCap's regular reports for all types of export, including API, nor offer customised reporting with SQL reports. The external module renders the plugin obsolete.
 
+### Export Mechanism for Reshaped and SQL Reports
+The mechanism via which the module accomplishes the export of reshaped, row-per-record reports and SQL reports is somewhat convoluted, and involves the REDCap server making a behind-the-scenes request to itself using `curl`. (There are other places where REDCap does this, e.g. the API plyground.) There are certain server configurations where this can be problematic and cause problems for the exporting process, and additional steps may be necessary to get exports working. For example: 
+* Ask your REDCap administrator to select the option relating to \"internal certificate verification\" in the system-level settings of the module.
+* Using the IP exception list with MFA? Ask your REDCap administrator to add `localhost` (`127.0.0.0`) to the "IP address exceptions" list on the "Security & Authentication" page in the REDCap Control Center.
+
 ********************************************************************************
 ## SQL Reports 
 ### Configuration
@@ -67,7 +72,7 @@ Notes:
 ### Exporting SQL Reports 
 SQL reports are exported only in CSV format via the Data Exports Reports & Stats page, but are additionally available in JSON and XML form via the API.
 
-### Permissions 
+### Editing SQL Reports: Permissions 
 SQL reports can be created and have their SQL edited only by REDCap administrators. Report title, description and visibility are editable by regular users in the usual way.
 
 ********************************************************************************
