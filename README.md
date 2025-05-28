@@ -53,7 +53,7 @@ The functionality of this external module differs in some respects from the old 
 ### Export Mechanism for Reshaped and SQL Reports
 The mechanism via which the module accomplishes the export of reshaped, row-per-record reports and SQL reports is somewhat convoluted, and involves the REDCap server making a behind-the-scenes request to itself using `curl`. (There are other places where REDCap does this, e.g. the API plyground.) There are certain server configurations where this can be problematic and cause problems for the exporting process, and additional steps may be necessary to get exports working. For example: 
 * Ask your REDCap administrator to select the option relating to \"internal certificate verification\" in the system-level settings of the module.
-* Using the IP exception list with MFA? Ask your REDCap administrator to add `localhost` (`127.0.0.0`) to the "IP address exceptions" list on the "Security & Authentication" page in the REDCap Control Center.
+* Using the IP exception list with MFA? Ask your REDCap administrator to add `localhost` (`127.0.0.1`) to the "IP address exceptions" list on the "Security & Authentication" page in the REDCap Control Center.
 
 ********************************************************************************
 ## SQL Reports 
