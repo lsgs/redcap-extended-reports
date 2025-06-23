@@ -878,7 +878,7 @@ class Report
         // include dag header if selected for report
         if (count($report_data)>0 && $this->report_attr['output_dags']) { // find the position of the DAG col
             $eId = key($report_data[key($report_data)]);
-            $row1Data = (is_numeric($eId)) ? $report_data[key($report_data)][$eId] : $eId;
+            $row1Data = (is_numeric($eId)) ? $report_data[key($report_data)][$eId] : array();
             $dagPos = (array_key_exists('redcap_data_access_group', $row1Data)) ? array_search('redcap_data_access_group', array_keys($row1Data)) : false;
             if ($dagPos !== false) {
                 $dagHeader = array(
