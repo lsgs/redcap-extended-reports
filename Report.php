@@ -780,7 +780,7 @@ class Report
             inner join redcap_events_arms ea on r.project_id=ea.project_id
             inner join redcap_events_metadata em on ea.arm_id=em.arm_id ';
 
-        if (\REDCap::isLongitudinal()) {
+        if ($Proj->longitudinal) {
             $sql .= 'inner join redcap_events_forms ef on em.event_id=ef.event_id ';
             $params[] = $this->report_id;
         } else {
