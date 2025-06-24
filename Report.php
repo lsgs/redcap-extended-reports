@@ -602,7 +602,15 @@ class Report
                             $td = [$td];
                         }
                         foreach ($td as $thisTd) {
-                            $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                            switch ($this->reshape_instance) {
+                                case 'conc_space':
+                                case 'conc_comma':
+                                case 'conc_pipe':
+                                    $thisFieldValue = [$thisTd]; // already run individual instance values through $this->makeOutputValue()
+                                    break;
+                                default:
+                                    $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                            }
                             foreach ($thisFieldValue as $thisValue) {
                                 $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);;
                             }
@@ -639,7 +647,15 @@ class Report
                                 }
                             }
                         } else {
-                            $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
+                            switch ($this->reshape_instance) {
+                                case 'conc_space':
+                                case 'conc_comma':
+                                case 'conc_pipe':
+                                    $thisFieldValue = [$td]; // already run individual instance values through $this->makeOutputValue()
+                                    break;
+                                default:
+                                    $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
+                            }
                             foreach ($thisFieldValue as $thisValue) {
                                 $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                             }
