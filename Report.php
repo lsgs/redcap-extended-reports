@@ -602,7 +602,7 @@ class Report
                             $td = [$td];
                         }
                         foreach ($td as $thisTd) {
-                            switch ($this->reshape_instance) {
+                            switch ($this->reshape_instance && ($headers[$fieldIdx]['is_repeating_event']  | $headers[$fieldIdx]['is_repeating_form'])) {
                                 case 'conc_space':
                                 case 'conc_comma':
                                 case 'conc_pipe':
@@ -647,7 +647,7 @@ class Report
                                 }
                             }
                         } else {
-                            switch ($this->reshape_instance) {
+                            switch ($this->reshape_instance && ($headers[$fldIdx]['is_repeating_event']  | $headers[$fldIdx]['is_repeating_form'])) {
                                 case 'conc_space':
                                 case 'conc_comma':
                                 case 'conc_pipe':
