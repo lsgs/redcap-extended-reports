@@ -602,14 +602,11 @@ class Report
                             $td = [$td];
                         }
                         foreach ($td as $thisTd) {
-                            switch ($this->reshape_instance && ($headers[$fieldIdx]['is_repeating_event']  | $headers[$fieldIdx]['is_repeating_form'])) {
-                                case 'conc_space':
-                                case 'conc_comma':
-                                case 'conc_pipe':
-                                    $thisFieldValue = [$thisTd]; // already run individual instance values through $this->makeOutputValue()
-                                    break;
-                                default:
-                                    $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                            if (($headers[$fieldIdx]['is_repeating_event'] || $headers[$fieldIdx]['is_repeating_form']) &&
+                                    (starts_with($this->reshape_instance, 'conc_'))) {
+                                $thisFieldValue = [$thisTd]; // already run individual instance values through $this->makeOutputValue()
+                            } else {
+                                $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
                             }
                             foreach ($thisFieldValue as $thisValue) {
                                 $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);;
@@ -647,14 +644,11 @@ class Report
                                 }
                             }
                         } else {
-                            switch ($this->reshape_instance && ($headers[$fldIdx]['is_repeating_event']  | $headers[$fldIdx]['is_repeating_form'])) {
-                                case 'conc_space':
-                                case 'conc_comma':
-                                case 'conc_pipe':
-                                    $thisFieldValue = [$td]; // already run individual instance values through $this->makeOutputValue()
-                                    break;
-                                default:
-                                    $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
+                            if (($headers[$fldIdx]['is_repeating_event'] || $headers[$fldIdx]['is_repeating_form']) &&
+                                    (starts_with($this->reshape_instance, 'conc_'))) {
+                                $thisFieldValue = [$td]; // already run individual instance values through $this->makeOutputValue()
+                            } else {
+                                $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
                             }
                             foreach ($thisFieldValue as $thisValue) {
                                 $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
