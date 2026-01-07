@@ -59,6 +59,10 @@ class ExtendedReports extends AbstractExternalModule
             }
 
         } else if (PAGE == 'DataExport/report_ajax.php' || (\DataExport::isPublicReport() && isset($_POST['report_id']))) {
+            if (\DataExport::isPublicReport()) {
+                global $user_rights;
+                $user_rights['reports'] = true;
+            }
             // viewing a report - get the html to display
             $report = new Report($project_id, intval($this->report_id), $this);
             if ($report->is_extended) {

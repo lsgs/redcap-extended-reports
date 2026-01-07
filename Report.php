@@ -363,7 +363,7 @@ class Report
     }
 
     protected function canViewPublic($report) {
-        global $Proj, $lang, $secondary_pk, $custom_record_label;
+        global $Proj, $secondary_pk, $custom_record_label;
         // Make sure user has access to this report if viewing inside a project
         if (isset($report['report_id'])) {
             $report_id = $report['report_id']; 
@@ -609,7 +609,7 @@ class Report
                                 $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
                             }
                             foreach ($thisFieldValue as $thisValue) {
-                                $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);;
+                                $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);
                             }
                         }
                     }
@@ -768,7 +768,7 @@ class Report
     }
 
     protected function doReshapedReport($format) {
-        global $lang, $Proj, $user_rights;
+        global $Proj, $user_rights;
 
         if (defined('USERID') && empty($user_rights)) { // e.g. api exports
             $user_rights = $this->module::getUserRights(USERID)[USERID]; // patched version of REDCap::getUserRights()
@@ -841,10 +841,8 @@ class Report
             if ($thisHdr['element_type']=='checkbox' && !$this->report_attr['combine_checkbox_values']) {
                 $hasSplitCbOrInstances = true;
 
-                // *******************************************
-                // TODO handle missing value checkbox columns?
-                // *******************************************
-                $thisHdr['subvalues'] = array_keys(\parseEnum($Proj->metadata[$thisHdr['field_name']]['element_enum']));
+                // add horrible missing value checkbox columns - would be soooo much nicer if we applied a selected missing code to all checkbox cols...
+                $thisHdr['subvalues'] = $this->getChoices($thisHdr['field_name']);
             } else {
                 $thisHdr['subvalues'] = array();
             }
@@ -886,6 +884,7 @@ class Report
         }
 
         // include dag header if selected for report
+        $dagPos = false;
         if (count($report_data)>0 && $this->report_attr['output_dags']) { // find the position of the DAG col
             $eId = key($report_data[key($report_data)]);
             $row1Data = (is_numeric($eId)) ? $report_data[key($report_data)][$eId] : array();
@@ -895,6 +894,7 @@ class Report
                     'report_id' => $this->report_id,
                     'event_id' => $Proj->firstEventId,
                     'field_name' => 'redcap_data_access_group',
+                    'instance_count' => 0,
                     'subvalues' => array()
                 );
                 array_splice($headers, $dagPos, 0, array($dagHeader));
@@ -903,6 +903,51 @@ class Report
                 $dagIdToLbl = \REDCap::getGroupNames(false);
                 foreach ($dagIdToUN as $id => $un) {
                     $this->dag_names[$un] = $dagIdToLbl[$id];
+                }
+            }
+        }
+
+        // include survey identifier and timestamps headers if selected for report
+        if (count($report_data)>0 && $this->report_attr['output_survey_fields']) {
+            $sidHeader = array(
+                'report_id' => $this->report_id,
+                'event_id' => $Proj->firstEventId,
+                'field_name' => 'redcap_survey_identifier',
+                'instance_count' => 0,
+                'subvalues' => array()
+            );
+            array_splice($headers, ($dagPos)?2:1, 0, array($sidHeader));
+
+            $eId = key($report_data[key($report_data)]);
+            $row1Data = (is_numeric($eId)) ? $report_data[key($report_data)][$eId] : array();
+            $timestampCols = array_filter(array_keys($row1Data), function($c) { return \ends_with($c, '_timestamp'); } );
+            
+            // add ts header before first occurrence of field from each survey form
+            foreach ($timestampCols as $tsCol) {
+                $tsColForm = str_replace('_timestamp', '', $tsCol);
+                foreach ($headers as $hdrIdx => $hdr) {
+                    if ($hdr['form_name']==$tsColForm && $hdr['field_name']!==$Proj->table_pk) {
+                        $tsHeader = array(
+                            'report_id' => $this->report_id,
+                            'arm_id' => $hdr['arm_id'], // use the same arm/event/repeat/permission settings as the field found from the survey
+                            'arm_name' => $hdr['arm_name'],
+                            'event_id' => $hdr['event_id'],
+                            'descrip' => $hdr['descrip'],
+                            'unique_name' => $eventUniqueNames[$hdr['event_id']],
+                            'in_filter' => $hdr['in_filter'],
+                            'field_name' => $tsCol,
+                            'form_name' => $tsColForm,
+                            'element_label' => 'Survey Timestamp', // not in lang file - hardcoded
+                            'subvalues' => array(),
+                            'is_repeating_event' => $hdr['is_repeating_event'],
+                            'is_repeating_form' => $hdr['is_repeating_form'],
+                            'instance_count' => $hdr['instance_count'],
+                            'view_rights' => $hdr['view_rights'],
+                            'export_rights' => $hdr['export_rights']
+                        );
+                        array_splice($headers, $hdrIdx, 0, array($tsHeader));
+                        break;
+                    }
                 }
             }
         }
@@ -972,7 +1017,7 @@ class Report
                         case 'conc_pipe': $sep = '|'; break;
                         default: $sep = ''; break;
                     }
-                    $instrumentKey = ($thisHeader['is_repeating_form']) ? $Proj->metadata[$thisHeader['field_name']]['form_name'] : '';
+                    $instrumentKey = ($thisHeader['is_repeating_form']) ? $thisHeader['form_name'] : '';
                     $thisHdrInstances = $report_data[$returnRecord]['repeat_instances'][$thisHeader['event_id']][$instrumentKey] ?? array();
 
                     if ($this->reshape_instance=='first') {
@@ -1138,6 +1183,8 @@ class Report
             } else if ($fldName==='redcap_data_access_group') {
                 global $lang;
                 $title = $lang['global_78'];
+            } else if ($fldName==='redcap_survey_identifier') {
+                $title = 'Survey Identifier'; // not in lang file - hardcoded e.g. in Records::getData()
             } else if ($fldName===\REDCap::getRecordIdField()) {
                 // collapsing by event, so event/arm info not relevant for pk field
                 $title = $this->truncateLabel(\REDCap::filterHtml($th['element_label']));
@@ -1249,6 +1296,7 @@ class Report
                 $thisTitle = str_replace('|e|',$evt,$thisTitle);
                 $thisTitle = str_replace('|v|',$vn,$thisTitle);
                 $thisTitle = str_replace('|i|',$instanceDisplay,$thisTitle);
+                if ($vn==='redcap_data_access_group' || $vn==='redcap_survey_identifier') $thisTitle = trim($thisTitle, $sep);
                 $colTitles[] = $thisTitle;
             }
         }
@@ -1256,11 +1304,10 @@ class Report
     }
         
     protected function makeCheckboxHeaders($th, $instance=0) {
-        global $Proj;
         $inst = ($instance>0) ? "#$instance" : "";
         $headers = '';
-        $choices = \parseEnum($Proj->metadata[$th['field_name']]['element_enum']);
-        foreach ($th['subvalues'] as $thsv) {
+        $choices = $this->getChoices($th['field_name']);
+        foreach (array_keys($th['subvalues']) as $thsv) {
             switch ($this->report_attr['report_display_header']) {
                 case 'VARIABLE':
                     $title = "<div class=\"rpthdr\">".$th['field_name']."___$thsv</div>"; break;
@@ -1281,13 +1328,27 @@ class Report
      * @param string $outputFormat view or export format, typically html, csv, csvraw, csvlabels
      * @param string $decimalCharacter Override default decimal character (.)
      * @param string $delimiter Override default delimiter character (,)
-     * @return Array $return Array of values: single value except for non-combined checkboxes
+     * @return Array $return Array of values: single element/value except for non-combined checkboxes
      */
     protected function makeOutputValue($value, $fieldName, $outputFormat, $decimalCharacter=null, $delimiter=null) {
         global $Proj, $user_rights;
         $decimalCharacter = $decimalCharacter ?? static::DEFAULT_DECIMAL_CHAR;
         $delimiter = $delimiter ?? static::DEFAULT_CSV_DELIMITER;
-        $field = $Proj->metadata[$fieldName];
+        if (ends_with($fieldName, '_timestamp')) {
+            $userDateFormat = \DateTimeRC::get_user_format_full(); // Get user's datetime format (e.g., M-D-Y_24, D.M.Y_12)
+            switch (lower(substr($userDateFormat, 0, 1))) {
+                case 'm': $valType = 'datetime_mdy'; break;
+                case 'd': $valType = 'datetime_dmy'; break;
+                default: $valType = 'datetime_ymd'; break;
+            }
+            $field = array(
+                'field_name' => $fieldName,
+                'element_type' => 'text',
+                'element_validation_type' => $valType
+            );
+        } else {
+            $field = $Proj->metadata[$fieldName];
+        }
         
         if ($fieldName==$Proj->table_pk) {
             $outValue = $this->makePkDisplay($value, $outputFormat);
@@ -1431,13 +1492,9 @@ class Report
     }
 
     protected function makeChoiceDisplay($val, $fieldName, $format, $decimalCharacter='', $delimiter='') {
-        global $Proj, $missingDataCodes;
+        global $Proj;
         if (!is_array($val) && trim($val)=='') { return ''; }
-        if ($Proj->metadata[$fieldName]['element_type']==='sql') {
-            $choices = \parseEnum(\getSqlFieldEnum($Proj->metadata[$fieldName]['element_enum']));
-        } else {
-            $choices = \parseEnum($Proj->metadata[$fieldName]['element_enum']);
-        }
+        $choices = $this->getChoices($fieldName);
 
         if (
                 // combined checkbox: concat all *selected* values/labels into single value
@@ -1543,17 +1600,36 @@ class Report
         return $val;
     }
 
+    protected function getChoices(string $fieldName): array {
+        global $Proj, $missingDataCodes;
+        $choices = array();
+        if (!isset($Proj->metadata[$fieldName])) { throw new \Exception("$fieldName is not a valid field name"); }
+        if ($Proj->metadata[$fieldName]['element_type']==='sql') {
+            $choices = \parseEnum(\getSqlFieldEnum($Proj->metadata[$fieldName]['element_enum']));
+        } else {
+            $choices = \parseEnum($Proj->metadata[$fieldName]['element_enum']);
+        }
+        if ($this->report_attr['output_missing_data_codes'] && !empty($missingDataCodes)) {
+            $choices = $choices + $missingDataCodes; // union not merge to preserve keys
+        }
+        return $choices;
+    }
+
     protected function makeTextDisplay($val, $fieldName, $valType, $outputFormat, $decimalCharacter) {
         $val = (is_string($val)) ? $val : json_encode($val);
         if (trim($val)=='') { return ''; }
         switch ($valType) {
             case 'date_mdy':
             case 'date_dmy':
+                $outVal = ($outputFormat=='html') ? \DateTimeRC::datetimeConvert(substr($val, 0, 10), 'ymd', substr($valType, -3)) : $val; // reformat raw ymd date/datetime value to mdy or dmy, if appropriate
+                break;
             case 'datetime_mdy':
             case 'datetime_dmy':
+                $outVal = ($outputFormat=='html') ? \DateTimeRC::datetimeConvert(substr($val, 0, 16), 'ymd', substr($valType, -3)) : $val; // reformat raw ymd date/datetime value to mdy or dmy, if appropriate
+                break;
             case 'datetime_seconds_mdy':
             case 'datetime_seconds_dmy':
-                $outVal = \DateTimeRC::datetimeConvert($val, 'ymd', substr($valType, -3)); // reformat raw ymd date/datetime value to mdy or dmy, if appropriate
+                $outVal = ($outputFormat=='html') ? \DateTimeRC::datetimeConvert($val, 'ymd', substr($valType, -3)) : $val; // reformat raw ymd date/datetime value to mdy or dmy, if appropriate
                 break;
             case 'email':
                 $outVal = ($outputFormat=='html') ? "<a href='mailto:$val'>$val</a>" : $val;
