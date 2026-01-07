@@ -191,10 +191,10 @@ class Report
             $cacheOptions[REDCapCache::OPTION_SALT][] = ['timestamp'=>NOW];
         }
         // Build dynamic filter options (if any)
-        $dynamic_filters = ''; // live filters not implemented for extended reports \DataExport::displayReportDynamicFilterOptions($_POST['report_id']);
-        /*// Obtain any dynamic filters selected from query string params
+        $dynamic_filters = \DataExport::displayReportDynamicFilterOptions($_POST['report_id']);
+        // Obtain any dynamic filters selected from query string params
         list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
-        // Total number of records queried
+        /*// Total number of records queried
         $totalRecordsQueried = Records::getCountRecordEventPairs();
         // For report A and B, the number of results returned will always be the same as total records queried
         if ($_POST['report_id'] == 'ALL' || ($_POST['report_id'] == 'SELECTED' && (!isset($_GET['events']) || empty($_GET['events'])))) {
@@ -211,7 +211,7 @@ class Report
                                                         (isset($_GET['events']) ? explode(',', $_GET['events']) : array()),
                                                         false, false, false, true, true, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);*/
         //list($report_table, $num_results_returned) = $this->doExtendedReport('html');
-        list ($report_table, $num_results_returned) = $cacheManager->getOrSet([$this, 'doExtendedReport'], ['html'], $cacheOptions);
+        list ($report_table, $num_results_returned) = $cacheManager->getOrSet([$this, 'doExtendedReport'], ['html', $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId], $cacheOptions);
         
         if ($this->is_sql) {
             $enable_plotting = false; // no Stats & Charts option for sql report
@@ -448,6 +448,14 @@ class Report
             $params[\REDCap::escapeHtml($key)] = \REDCap::escapeHtml($value);
         }
 
+        $liveFilterLogic = $liveFilterGroupId = $liveFilterEventId = "";
+        if (isset($_POST['live_filters_apply']) && $_POST['live_filters_apply'] == 'on') {
+            list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
+            foreach ($_GET as $key => $value) {
+                if (starts_with($key, 'lf')) $url .= "&$key=".urlencode($this->module->escape($value)); // pass live filter info to curl call
+            }
+        }
+
         $params['redcap_csrf_token'] = $this->module->getCSRFToken();
         $param_string = http_build_query($params, '', '&');
 
@@ -502,7 +510,7 @@ class Report
             $decimalCharacter = isset($_POST['decimalCharacter']) ? \REDCap::escapeHtml($_POST['decimalCharacter']) : '';
             \UIState::saveUIStateValue('', 'export_dialog', 'decimalCharacter', $decimalCharacter);
 
-            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $doc_id, $csvDelimiter, $decimalCharacter); 
+            list($data_content, $num_records_returned) = $this->doExtendedReport($_POST['export_format'], $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId, $doc_id, $csvDelimiter, $decimalCharacter); 
 
             $sql = "select docs_name from redcap_docs where docs_id = ?";
             $q = $this->module->query($sql, [$doc_id]);
@@ -543,7 +551,7 @@ class Report
         $this->report_attr['fields'] = $fields;
     }
 
-    public function doExtendedReport($format, $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
+    public function doExtendedReport($format, $liveFilterLogic='', $liveFilterGroupId='', $liveFilterEventId='', $doc_id=null, $csvDelimiter=null, $decimalCharacter=null) {
         global $Proj;
         $Proj = $Proj ?? new \Project($this->project_id);
         $Proj->loadEventsForms(); // ensure full initialisation in db
@@ -563,7 +571,7 @@ class Report
             if ($this->reshape_instance!=='cols') {
                 $this->report_attr['combine_checkbox_values'] = 1;
             }
-            list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport($format);
+            list($rows, $headers, $hasSplitCbOrInstances) = $this->doReshapedReport($format, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId);
         }
 
         if (is_array($rows)) {
@@ -767,14 +775,14 @@ class Report
         return array($filteredRows, $headers, false);
     }
 
-    protected function doReshapedReport($format) {
+    protected function doReshapedReport($format, $liveFilterLogic='', $liveFilterGroupId='', $liveFilterEventId='') {
         global $Proj, $user_rights;
 
         if (defined('USERID') && empty($user_rights)) { // e.g. api exports
             $user_rights = $this->module::getUserRights(USERID)[USERID]; // patched version of REDCap::getUserRights()
         }
 
-        $report_data = self::getReport($this->report_id, $format); // \REDCap::getReport($this->report_id, 'array', false, false); // note \REDCap::getReport() does not work for superusers when impersonating
+        $report_data = self::getReport($this->report_id, $format, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId); // note \REDCap::getReport() does not work for superusers when impersonating
 
         // work our what our reshaped colmns are and thereby the way to reference the report data array for each reshaped row
         $headers = $params = array();
@@ -1717,7 +1725,7 @@ $report = REDCap::getReport('42', 'json');
 $report = REDCap::getReport('896', 'csv', true);
 </pre>
 	 */
-	public static function getReport($report_id, $outputFormat='array', $exportAsLabels=false, $exportCsvHeadersAsLabels=false)
+	public static function getReport($report_id, $outputFormat='array', $liveFilterLogic='', $liveFilterGroupId='', $liveFilterEventId='', $exportAsLabels=false, $exportCsvHeadersAsLabels=false)
 	{
 		$report_id = (int)$report_id;
 		if (!is_numeric($report_id) || $report_id < 1) return false;
@@ -1757,9 +1765,9 @@ $report = REDCap::getReport('896', 'csv', true);
 		$includeOdmMetadata = false;
 		$storeInFileRepository = false;
 		$replaceFileUploadDocId = ($outputFormat!='html');
-		$liveFilterLogic = '';
-		$liveFilterGroupId = '';
-		$liveFilterEventId = '';
+		//$liveFilterLogic = '';
+		//$liveFilterGroupId = '';
+		//$liveFilterEventId = '';
 		$isDeveloper = true;
 
 		$reportData = \DataExport::doReport(

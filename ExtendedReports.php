@@ -627,7 +627,7 @@ class ExtendedReports extends AbstractExternalModule
 		}
 
         try {
-            list($data_content, $num_records_returned) = $report->doExtendedReport($format, null, $csvDelimiter, $decimalCharacter);
+            list($data_content, $num_records_returned) = $report->doExtendedReport($format, '', '', '', null, $csvDelimiter, $decimalCharacter);
         } catch (\Exception $ex) {
             switch ($returnFormat) {
                 case 'csv': $data_content = $ex->getMessage(); break;

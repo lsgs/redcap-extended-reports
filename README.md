@@ -42,7 +42,7 @@ With the "Column per instance" option, field names will incorporate event and in
 The "Concatenate (space/comma/pipe)" causes a report to be handled as if "Combine checkbox options into single column" is selected irrespective of its actual setting. (There is no obvious way to show the data otherwise.)
 
 ### Live Filters
-Live filters are **not supported** (mainly because they're not supported by the `REDCap::getReport()` developer method).
+Live filters **are supported** from module v2.4.0.
 
 ### Exporting Reshaped Reports
 Row-per-record reshaping is **not** applied to stats package (SAS, SPSS, R, Stata) or ODM exports.
