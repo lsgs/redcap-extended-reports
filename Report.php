@@ -452,7 +452,9 @@ class Report
         if (isset($_POST['live_filters_apply']) && $_POST['live_filters_apply'] == 'on') {
             list ($liveFilterLogic, $liveFilterGroupId, $liveFilterEventId) = \DataExport::buildReportDynamicFilterLogic($_POST['report_id']);
             foreach ($_GET as $key => $value) {
-                if (starts_with($key, 'lf')) $url .= "&$key=".urlencode($this->module->escape($value)); // pass live filter info to curl call
+                $key = $this->module->escape($key);
+                $value = $this->module->escape($value);
+                if (starts_with($key, 'lf')) $url .= "&$key=".urlencode($value); // pass live filter info to curl call
             }
         }
 
