@@ -109,6 +109,9 @@ class Report
                 $this->$instanceVar = $val;
             }
         }
+        if (!$this->is_sql && empty($this->reshape_event) && empty($this->reshape_instance)) {
+            $this->is_extended = false; // if not sql or reshaped then ignore other settings like dag or rapid retrieval
+        }
     }
 
     /**
@@ -535,9 +538,9 @@ class Report
             if (empty(trim($dialog_content))) {
                 $dialog_content = "<p style='color:red'>The raw data for this export could not be downloaded, therefore it could not be reshaped.</p><p>This problem can be caused by a server configuration issue. Ask your administrator to select the option relating to \"internal certificate verification\" in the system-level settings for the \"Extended Reports\" external module.";
             } else if ($match) {
-                $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodifed.</p>".$dialog_content;
+                $dialog_content = "<p style='color:red'>An error occurred in processing the extended properties of this report. The file for download is unmodified.</p>".$dialog_content;
             } else {
-                $dialog_content = "<p style='color:red'>An error occurred when exporting this report internally in its standard form, prior to applying the extended proprties.</p>".$dialog_content;
+                $dialog_content = "<p style='color:red'>An error occurred when exporting this report internally in its standard form, prior to applying the extended properties.</p>".$dialog_content;
             }
         }
 
@@ -1005,7 +1008,10 @@ class Report
 
             // add max instance count into $headers for repeating data
             foreach ($headers as $h => $thisHdr) {
-                if (array_key_exists('instance_count', $thisHdr) && array_key_exists($thisHdr['field_name'], $viewOnlyVars)) {
+                if (array_key_exists('instance_count', $thisHdr) && 
+                    array_key_exists($thisHdr['field_name'], $viewOnlyVars) &&
+                    ($thisHdr['is_repeating_event'] || $thisHdr['is_repeating_form']) ) 
+                {
                     $headers[$h]['instance_count'] = $viewOnlyVars[$thisHdr['field_name']];
                 }
             }
