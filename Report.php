@@ -891,8 +891,16 @@ class Report
                 $viewOnlyVars[$thisHdr['field_name']] = 0; 
             }
 
-            if ($format=='html' || $thisHdr['export_rights']>0) {
-                $headers[] = $thisHdr; // only keep header for export when user has some export permission for field's form
+            $isPhi = $Proj->metadata[$thisHdr['field_name']]['field_phi'];
+
+            if (
+                $thisHdr['field_name'] == $Proj->table_pk ||                     // always include record id even if user has no view/export rights to first form
+                ($format=='html') || // && $thisHdr['view_rights']>0) || no form view handled in report view rendering (cols greyed out)  // user has read/edit access to field's form
+                ($format!='html' && $thisHdr['export_rights']==1) ||            // user has full export rights to field's form
+                ($format!='html' && $thisHdr['export_rights']==2 && !$isPhi) || // user has deid export rights to field's form but this is not a phi field
+                ($format!='html' && $thisHdr['export_rights']==3 && !$isPhi) )  // user has remove phi export rights to field's form but this is not a phi field
+            {
+                $headers[] = $thisHdr; // field included as column in report or export
             }
         }
 
@@ -1754,18 +1762,25 @@ $report = REDCap::getReport('896', 'csv', true);
 		}*/
 
 		// De-Identification settings
-		$hashRecordID = (isset($user_rights['forms_export'][$Proj->firstForm]) && $user_rights['forms_export'][$Proj->firstForm] > 1 && $Proj->table_pk_phi);
-		$removeIdentifierFields = null;
-		$removeUnvalidatedTextFields = null;
-		$removeNotesFields = null;
-		$removeDateFields = null;
+        if ((isset($user_rights['forms_export'][$Proj->firstForm]) && $user_rights['forms_export'][$Proj->firstForm] > 1 && $Proj->table_pk_phi) ||
+            (isset($_POST['deid-hashid']) && $_POST['deid-hashid']=='on') )
+        {
+            $hashRecordID = true;
+        } else {
+            $hashRecordID = false;
+        }
+		
+		$removeIdentifierFields = (isset($_POST['deid-remove-identifiers'])) ? htmlspecialchars($_POST['deid-remove-identifiers'],ENT_QUOTES) : null;
+		$removeUnvalidatedTextFields = (isset($_POST['deid-remove-text'])) ? htmlspecialchars($_POST['deid-remove-text'],ENT_QUOTES) : null;
+		$removeNotesFields = (isset($_POST['deid-remove-notes'])) ? htmlspecialchars($_POST['deid-remove-notes'],ENT_QUOTES) : null;
+		$removeDateFields = (isset($_POST['deid-dates-remove'])) ? htmlspecialchars($_POST['deid-dates-remove'],ENT_QUOTES) : null;
+		$dateShiftDates = (isset($_POST['deid-dates-shift'])) ? htmlspecialchars($_POST['deid-dates-shift'],ENT_QUOTES) : false;
+		$dateShiftSurveyTimestamps = (isset($_POST['deid-surveytimestamps-shift'])) ? htmlspecialchars($_POST['deid-surveytimestamps-shift'],ENT_QUOTES) : false;
 
-		$outputType = 'export';
+		$outputType = ($outputFormat=='html') ? 'report' : 'export';
 		$outputCheckboxLabel = false;
 		$outputDags = false;
 		$outputSurveyFields = false;
-		$dateShiftDates = false;
-		$dateShiftSurveyTimestamps = false;
 		$selectedInstruments = array();
 		$selectedEvents = array();
 		$returnIncludeRecordEventArray = false;
@@ -1777,6 +1792,21 @@ $report = REDCap::getReport('896', 'csv', true);
 		//$liveFilterGroupId = '';
 		//$liveFilterEventId = '';
 		$isDeveloper = true;
+        $csvDelimiter=(isset($_POST['csvDelimiter'])) ? htmlspecialchars($_POST['csvDelimiter'],ENT_QUOTES) : ","; 
+        $decimalCharacter=(isset($_POST['decimalCharacter'])) ? htmlspecialchars($_POST['decimalCharacter'],ENT_QUOTES) : ''; 
+        $returnFieldsForFlatArrayData=array();
+        $minimizeAmountDataReturned=false;
+        $applyUserDagFilter=true;
+        $bypassReportAccessCheck=false;
+        $excludeMissingDataCodes=false;
+        $returnBlankForGrayFormStatus=(isset($_POST['returnBlankForGrayFormStatus'])) ? htmlspecialchars($_POST['returnBlankForGrayFormStatus'],ENT_QUOTES) : false;
+        $doLoggingForExports=true;
+        $isDataExportAction=($outputFormat=='html') ? false : true; 
+        $project_id_override=null;                           
+        $usedForSmartChart=false;
+        $returnOnlyFileFields=false;
+        $cacheManager=null;
+        $cacheOptions=null;
 
 		$reportData = \DataExport::doReport(
 			$report_id,
@@ -1803,9 +1833,22 @@ $report = REDCap::getReport('896', 'csv', true);
 			$liveFilterLogic,
 			$liveFilterGroupId,
 			$liveFilterEventId,
-			$isDeveloper, ",", '', array(),
-			false, true, false, false,
-			false, true, true
+			$isDeveloper,
+            $csvDelimiter,
+            $decimalCharacter,
+            $returnFieldsForFlatArrayData,
+            $minimizeAmountDataReturned,
+            $applyUserDagFilter,
+            $bypassReportAccessCheck,
+            $excludeMissingDataCodes,
+            $returnBlankForGrayFormStatus,
+            $doLoggingForExports,
+            $isDataExportAction,
+            $project_id_override,
+            $usedForSmartChart,
+            $returnOnlyFileFields,
+            $cacheManager,
+            $cacheOptions
 		);
 
         return self::applyDefaultSorting($report_id, $reportData);
