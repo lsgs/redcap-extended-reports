@@ -883,7 +883,8 @@ class Report
                 $thisHdr['instance_count'] = $fieldMaxInstance;
             }
 
-            $thisHdr['view_rights'] = $user_rights['forms'][$thisHdr['form_name']];
+            $formViewRights = $user_rights['forms'][$thisHdr['form_name']];
+            $thisHdr['view_rights'] = method_exists('\UserRights', 'convertToLegacyDataViewingRights') ? \UserRights::convertToLegacyDataViewingRights($formViewRights) : $formViewRights;
             $thisHdr['export_rights'] = $user_rights['forms_export'][$thisHdr['form_name']];
             if ($format=='html' && $thisHdr['export_rights']==0 && $thisHdr['view_rights']>0) {
                 // fields on forms with view-only permissions (no export) will not be present in the output of doReport() 

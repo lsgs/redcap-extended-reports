@@ -9,7 +9,7 @@
             "institution": "Murdoch Children's Research Institute"
         }
     ],
-    "framework-version": 15,
+    "framework-version": 16,
     "enable-every-page-hooks-on-system-pages": true,
     "enable-every-page-hooks-on-login-form": true,
     "action-tags": [
