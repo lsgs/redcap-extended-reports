@@ -24,7 +24,7 @@ class ExtendedReports extends AbstractExternalModule
      * Catch a report view or export and if there's some "extended" config apply the necessary tweaks.
      */
     public function redcap_every_page_before_render($project_id=null) {
-        if (str_contains(PAGE,'DataExport')) {
+        if (defined('PAGE') && str_contains(PAGE,'DataExport')) {
             // Action tag: @REPORT-LABEL='?'
             $this->replaceLabels();
         }

@@ -57,6 +57,7 @@ class Report
             while ($result = $q->fetch_assoc($q)) {
                 $project_id = $result['project_id'];
             }
+            if (empty($_GET['pid'])) $_GET['pid'] = intval($project_id);
         }
         $this->project_id = intval($project_id);
     }
@@ -1541,7 +1542,13 @@ class Report
                     $selLbls[] = $this->module->escape($choices[$valkey]);
                 }
             }
-            $valstr = (count($selVals)==0) ? '' : ' <span class="text-muted">('.implode(', ',$selVals).')</span>';
+            if (count($selVals)==0) {
+                $valstr = '';
+            } else if ($format=='html') {
+                $valstr = ' <span class="text-muted">('.implode(', ',$selVals).')</span>';
+            } else {
+                $valstr = implode(',',$selVals);
+            }
             $lblstr = implode(', ',$selLbls);
             switch ($format){
                 case 'html': // return single value: labels and values of selected checkboxes "Choice 1, Choice 3 (1,3)"
