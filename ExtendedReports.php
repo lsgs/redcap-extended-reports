@@ -72,6 +72,7 @@ class ExtendedReports extends AbstractExternalModule
 
         } else if (PAGE == 'DataExport/data_export_ajax.php') {
             // exporting a report - get the export files (only csvraw and csvlabel export option gets any manipulation)
+            \UIState::saveUIStateValue('', 'export_dialog', 'returnBlankForGrayFormStatus', intval($_POST['returnBlankForGrayFormStatus']));
             $report = new Report($project_id, intval($this->report_id), $this);
             if ($report->is_extended && (\htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvraw' || \htmlspecialchars($_POST['export_format'], ENT_QUOTES)==='csvlabels')) {
                 if(!isset($_GET['extended_report_hook_bypass'])) {
@@ -119,15 +120,27 @@ class ExtendedReports extends AbstractExternalModule
                 $this->includeReshapeOptions($report);
             }
         } else if (isset($_GET['report_id'])) {
-            // viewing report
+            // viewing report - set default selection for returnBlankForGrayFormStatus in export dialog
+            $statusRtn = intval(\UIState::getUIStateValue('', 'export_dialog', 'returnBlankForGrayFormStatus')) ?? 0;
+            ?>
+            <script type='text/javascript'>
+                $(document).ready(function(){
+                    let statusRtn = <?= $statusRtn ?>;
+                    $('select[name=returnBlankForGrayFormStatus]').val(statusRtn).trigger('change');
+                });
+            </script>
+            <?php
 
         } else {
-            // live filters for 'ALL' report
+            // live filters for 'ALL' report / set default selection for returnBlankForGrayFormStatus in export dialog
             $lfAll = \DataExport::displayReportDynamicFilterOptions('ALL');
+            $statusRtn = intval(\UIState::getUIStateValue('', 'export_dialog', 'returnBlankForGrayFormStatus')) ?? 0;
             echo "<div id='rpta-live-filters' style='display:none;'>$lfAll</div>";
             ?>
             <script type='text/javascript'>
                 $(document).ready(function(){
+                    let statusRtn = <?= $statusRtn ?>;
+                    $('select[name=returnBlankForGrayFormStatus]').val(statusRtn).trigger('change');
                     let rptaLF = $('#rpta-live-filters');
                     $(rptaLF).find('span:first').append('<br>');
                     $(rptaLF).find('select').removeAttr('onchange').on('change', function(){
@@ -457,8 +470,21 @@ class ExtendedReports extends AbstractExternalModule
 
         foreach($config['project-settings'] as $projectSettingArray) {
             if ($projectSettingArray['key']!=='report-config') continue;
+            $config_count = count($projectSettings['report-config']);
             foreach($projectSettingArray['sub_settings'] as $subSettingAttrs) {
                 $settingKey = $subSettingAttrs['key'];
+
+                // ensure that this setting has the correct number of setting elements/values to cover where some settings may not e present in $_POST (e.g. checkboxes that are unchecked)
+                // suspect incorrect item counts may be the root if issues of settings getting offset when deleting reports
+                if (count($projectSettings[$settingKey]) < $config_count) {
+                    switch ($subSettingAttrs['type']) {
+                        case 'checkbox': $pad = false; break;
+                        case 'dropdown': $pad = null; break;
+                        default: $pad = ''; break;
+                    }
+                    $projectSettings[$settingKey] = array_pad($projectSettings[$settingKey], $config_count, $pad);
+                }
+
                 if ($settingKey==='report-id') {
                     $projectSettings['report-id'][$reportIndex] = "$report_id";
                 } else if (array_key_exists($subSettingAttrs['key'], $_POST)) {

@@ -486,7 +486,7 @@ class Report
 
         $response = curl_exec($curlpost);
         $info = curl_getinfo($curlpost);
-        curl_close($curlpost);
+        if (version_compare(PHP_VERSION, '8.5.0', '<')) curl_close($curlpost);
 
         if (isset($info['http_code']) && ($info['http_code'] == 404 || $info['http_code'] == 407 || $info['http_code'] >= 500)) $response = "{title:'{$lang['global_01']}',content:'$response'}";
 
@@ -522,7 +522,8 @@ class Report
             $q = $this->module->query($sql, [$doc_id]);
             $csv_filename = $q->fetch_assoc($q)['docs_name'];
 
-            $data_edoc_id = \DataExport::storeExportFile($csv_filename, trim($data_content), true, false);
+            $data_content = trim($data_content);
+            $data_edoc_id = \DataExport::storeExportFile($csv_filename, $data_content, true, false);
 
             if ($data_edoc_id>0) {
                 // replace original doc id for download/sendit links with new doc id
@@ -620,7 +621,7 @@ class Report
                                     (starts_with($this->reshape_instance, 'conc_'))) {
                                 $thisFieldValue = [$thisTd]; // already run individual instance values through $this->makeOutputValue()
                             } else {
-                                $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx]['field_name'], 'html', $decimalCharacter);
+                                $thisFieldValue = $this->makeOutputValue($thisTd, $headers[$fieldIdx], 'html', $decimalCharacter);
                             }
                             foreach ($thisFieldValue as $thisValue) {
                                 $table_body .= $this->makeTD($thisValue, $headers[$fieldIdx]);
@@ -649,20 +650,20 @@ class Report
                 foreach ($rows as $row) {
                     foreach ($row as $fldIdx => $td) {
                         $thisField = $headers[$fldIdx];
-                        if ($headers[$fldIdx]['instance_count']>0 && $this->reshape_instance==='cols') {
+                        if ($thisField['instance_count']>0 && $this->reshape_instance==='cols') {
                             // for split instances $td will be an array of instance values (array of arrays for checkboxes)
                             foreach ($td as $thisInstanceTd) {
-                                $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $headers[$fldIdx]['field_name'], $valFormat, $decimalCharacter);
+                                $thisFieldValue = $this->makeOutputValue($thisInstanceTd, $thisField, $valFormat, $decimalCharacter);
                                 foreach ($thisFieldValue as $thisValue) {
                                     $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
                                 }
                             }
                         } else {
-                            if (($headers[$fldIdx]['is_repeating_event'] || $headers[$fldIdx]['is_repeating_form']) &&
+                            if (($thisField['is_repeating_event'] || $thisField['is_repeating_form']) &&
                                     (starts_with($this->reshape_instance, 'conc_'))) {
                                 $thisFieldValue = [$td]; // already run individual instance values through $this->makeOutputValue()
                             } else {
-                                $thisFieldValue = $this->makeOutputValue($td, $thisField['field_name'], $valFormat, $decimalCharacter, $csvDelimiter);
+                                $thisFieldValue = $this->makeOutputValue($td, $thisField, $valFormat, $decimalCharacter, $csvDelimiter);
                             }
                             foreach ($thisFieldValue as $thisValue) {
                                 $return_content .= $this->makeCsvValue($thisValue, $decimalCharacter, $csvDelimiter).$csvDelimiter;
@@ -682,7 +683,7 @@ class Report
                         $fieldName = $headers[$field]['field_name'];
 
                         if (isset($_POST['rawOrLabel']) && $_POST['rawOrLabel']=='label') {
-                            $thisFieldValue = $this->makeOutputValue($value, $fieldName, 'csvlabels', $decimalCharacter);
+                            $thisFieldValue = $this->makeOutputValue($value, $headers[$field], 'csvlabels', $decimalCharacter);
                             foreach ($thisFieldValue as $thisValue) {
                                 $value .= $thisValue;
                             }
@@ -1091,7 +1092,7 @@ class Report
                                     case 'conc_space':
                                     case 'conc_comma':
                                     case 'conc_pipe':
-                                        $thisInstanceOutput = $this->makeOutputValue($thisInstanceValue, $thisHeader['field_name'], $format);
+                                        $thisInstanceOutput = $this->makeOutputValue($thisInstanceValue, $thisHeader, $format);
                                         $thisRecValue .= ((empty($thisInstanceOutput))?'':$thisInstanceOutput[0]).$sep;
                                         break;
                                     default:
@@ -1257,7 +1258,7 @@ class Report
             $rowspan = ($numThRows > 1 && count($th['subvalues']) == 0 && $th['instance_count'] == 0) ? " rowspan=2" : "";
             
             // If user does not have form-level access to this field's form
-            if ($fldName != $Proj->table_pk && $user_rights['forms'][$Proj->metadata[$fldName]['form_name']] == '0') {
+            if ($th['view_rights'] == '0') {
                 $noAccess = 'class="form_noaccess"';
             } else {
                 $noAccess = '';
@@ -1350,14 +1351,15 @@ class Report
     /**
      * makeOutputValue($value, $fieldName, $outputFormat, $decimalCharacter=null, $delimiter=null)
      * @param mixed $value A string or array of values
-     * @param string $fielddName Name of the field
+     * @param array $header Name of the field
      * @param string $outputFormat view or export format, typically html, csv, csvraw, csvlabels
      * @param string $decimalCharacter Override default decimal character (.)
      * @param string $delimiter Override default delimiter character (,)
      * @return Array $return Array of values: single element/value except for non-combined checkboxes
      */
-    protected function makeOutputValue($value, $fieldName, $outputFormat, $decimalCharacter=null, $delimiter=null) {
+    protected function makeOutputValue(mixed $value, array $header, string $outputFormat, ?string $decimalCharacter=null, ?string $delimiter=null) {
         global $Proj, $user_rights;
+        $fieldName = $header['field_name'];
         $decimalCharacter = $decimalCharacter ?? static::DEFAULT_DECIMAL_CHAR;
         $delimiter = $delimiter ?? static::DEFAULT_CSV_DELIMITER;
         if (ends_with($fieldName, '_timestamp')) {
@@ -1386,8 +1388,8 @@ class Report
             $outValue = $this->makeInstanceDisplay($value);
         } else if ($fieldName=='redcap_data_access_group') { 
             $outValue = $this->makeDAGDisplay($value, $outputFormat, $decimalCharacter, $delimiter);
-        } else if ($user_rights['forms'][$Proj->metadata[$fieldName]['form_name']] == '0') {
-            $outValue = (is_array($value)) ? array_fill_keys(array_keys($value), "-") : "-"; // User has no rights to this field
+        } else if ($header['view_rights'] == '0') {
+            $outValue = (is_array($value)) ? array_fill_keys(array_keys($value), "-") : "-"; // User has no rights to view this field
         } else if (in_array($field['element_type'], array("advcheckbox", "radio", "select", "checkbox", "dropdown", "sql", "yesno", "truefalse"))) {
             $outValue = $this->makeChoiceDisplay($value, $fieldName, $outputFormat, $decimalCharacter, $delimiter);
         } else if ($field['element_type']==='notes' || $field['element_type']==='textarea') {
@@ -1425,8 +1427,11 @@ class Report
         return $outValue;
     }
 
-    protected function makeTD($value, $header) {
+    protected function makeTD(string|int|float $value, array $header) {
         $value = \REDCap::filterHtml($value);
+        if ($header['view_rights'] == '0') {
+            return "<td class='form_noaccess'>$value</td>";
+        }
         if ($header['element_type']=='file') {
             $value = str_replace('removed=','onclick=',$value);
         }
@@ -1876,7 +1881,7 @@ $report = REDCap::getReport('896', 'csv', true);
                 $fldIsNum = (
                              ($fld==$Proj->table_pk && $Proj->project['auto_inc_set']=='1') ||
                              $fldType=='calc' || $fldType=='slider' || 
-                             contains($fldValType,'number') || $fldValType=='integer' || $fldValType=='float'
+                             contains($fldValType,'number') || $fldValType=='integer' || $fldValType=='int' || $fldValType=='float'
                             );
                 $sortFields[$i-1] = $fld;
                 $sortTypes[$i-1] = ($rpt["orderby_sort$i"]=='DESC') ? \SORT_DESC : \SORT_ASC;
