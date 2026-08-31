@@ -1427,8 +1427,8 @@ class Report
         return $outValue;
     }
 
-    protected function makeTD(string|int|float $value, array $header) {
-        $value = \REDCap::filterHtml($value);
+    protected function makeTD(mixed $value, array $header) {
+        $value = \REDCap::filterHtml($value ?? '');
         if ($header['view_rights'] == '0') {
             return "<td class='form_noaccess'>$value</td>";
         }
