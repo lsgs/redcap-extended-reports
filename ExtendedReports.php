@@ -476,6 +476,7 @@ class ExtendedReports extends AbstractExternalModule
 
                 // ensure that this setting has the correct number of setting elements/values to cover where some settings may not e present in $_POST (e.g. checkboxes that are unchecked)
                 // suspect incorrect item counts may be the root if issues of settings getting offset when deleting reports
+                if (!array_key_exists($settingKey, $projectSettings)) $projectSettings[$settingKey] = array();
                 if (count($projectSettings[$settingKey]) < $config_count) {
                     switch ($subSettingAttrs['type']) {
                         case 'checkbox': $pad = false; break;
