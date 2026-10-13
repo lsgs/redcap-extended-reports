@@ -1289,13 +1289,11 @@ class Report
             $sep = '.';
         }
         if ($th['element_type']=='checkbox' && !$this->report_attr['combine_checkbox_values']) {
-            $choices = \parseEnum($Proj->metadata[$th['field_name']]['element_enum']);
-        
-            foreach ($th['subvalues'] as $thsv) {
+            foreach ($th['subvalues'] as $thsv_val => $thsv_lbl) {
                 if ($format=='csvlabels') {
-                    $varNames[] = $this->truncateLabel(strip_tags($th['element_label']))." (choice=".strip_tags($choices[$thsv]).")";
+                    $varNames[] = $this->truncateLabel(strip_tags($th['element_label']))." (choice=".strip_tags($thsv_lbl).")";
                 } else {
-                    $varNames[] = $th['field_name'].'___'.$thsv;
+                    $varNames[] = $th['field_name'].'___'.$thsv_val;
                 }
             }
         } else {
