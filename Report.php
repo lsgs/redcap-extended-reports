@@ -486,7 +486,6 @@ class Report
 
         $response = curl_exec($curlpost);
         $info = curl_getinfo($curlpost);
-        if (version_compare(PHP_VERSION, '8.5.0', '<')) curl_close($curlpost);
 
         if (isset($info['http_code']) && ($info['http_code'] == 404 || $info['http_code'] == 407 || $info['http_code'] >= 500)) $response = "{title:'{$lang['global_01']}',content:'$response'}";
 
@@ -590,7 +589,7 @@ class Report
         $return_content = '';
 
         if ($format=='html') {
-            $report_table = '';
+            $report_table = $table_header = $table_body = '';
             if ($num_results_returned === 0) {
                 $report_table='<table id="report_table" class="dataTable cell-border" style="table-layout:fixed;margin:0;font-family:Verdana;font-size:11px;"><thead><tr></tr></thead><tbody><tr class="odd"><td style="color:#777;border:1px solid #ccc;padding:10px 15px !important;" colspan="0">No results were returned</td></tr></tbody></table>';
             } else {
@@ -788,6 +787,7 @@ class Report
         if (defined('USERID') && empty($user_rights)) { // e.g. api exports
             $user_rights = $this->module::getUserRights(USERID)[USERID]; // patched version of REDCap::getUserRights()
         }
+        $isPublicReport = \DataExport::isPublicReport();
 
         $report_data = self::getReport($this->report_id, $format, $liveFilterLogic, $liveFilterGroupId, $liveFilterEventId); // note \REDCap::getReport() does not work for superusers when impersonating
 
@@ -885,9 +885,14 @@ class Report
                 $thisHdr['instance_count'] = $fieldMaxInstance;
             }
 
-            $formViewRights = $user_rights['forms'][$thisHdr['form_name']];
-            $thisHdr['view_rights'] = method_exists('\UserRights', 'convertToLegacyDataViewingRights') ? \UserRights::convertToLegacyDataViewingRights($formViewRights) : $formViewRights;
-            $thisHdr['export_rights'] = $user_rights['forms_export'][$thisHdr['form_name']];
+            if ($isPublicReport) {
+                $thisHdr['view_rights'] = 1;
+                $thisHdr['export_rights'] = 2;
+            } else {
+                $formViewRights = $user_rights['forms'][$thisHdr['form_name']];
+                $thisHdr['view_rights'] = method_exists('\UserRights', 'convertToLegacyDataViewingRights') ? \UserRights::convertToLegacyDataViewingRights($formViewRights) : $formViewRights;
+                $thisHdr['export_rights'] = $user_rights['forms_export'][$thisHdr['form_name']];
+            }
             if ($format=='html' && $thisHdr['export_rights']==0 && $thisHdr['view_rights']>0) {
                 // fields on forms with view-only permissions (no export) will not be present in the output of doReport() 
                 // record here and do separate data read below
@@ -1194,7 +1199,7 @@ class Report
     protected function makeReportColTitle($th, $numThRows, $raw=false) {
         global $Proj, $user_rights;
         $fldName = \REDCap::filterHtml((is_array($th))?$th['field_name']:(string)$th);
-        $inst = '';
+        $inst = $colspan = $rowspan = $noAccess = '';
 
         if ($raw) {
             $title = $fldName;
@@ -1872,7 +1877,7 @@ $report = REDCap::getReport('896', 'csv', true);
         $rpt = \DataExport::getReports($report_id);
 
         // determine sort properties
-        $sortFields = array();
+        $sortFields = $sortTypes = $sortFlags = array();
         for ($i=1; $i<4; $i++) {
             $fld = $rpt["orderby_field$i"];
             if (!is_null($fld)){

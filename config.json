@@ -10,6 +10,9 @@
         }
     ],
     "framework-version": 16,
+    "compatibility": {
+		"php-version-min": "8.0.0"
+	},
     "enable-every-page-hooks-on-system-pages": true,
     "enable-every-page-hooks-on-login-form": true,
     "action-tags": [
